@@ -1,0 +1,164 @@
+{
+  "schema": 0,
+  "capsule_id": "steam-570940-dark-souls-remastered-1.03.1",
+  "sanitized_fixture": true,
+  "game": {
+    "title": "DARK SOULS REMASTERED",
+    "source_store": "Steam",
+    "appid": 570940,
+    "preserved_version": "application 1.03.1 / regulation 1.04"
+  },
+  "documents": {
+    "readme": "docs/00_README.md",
+    "game_sheet": "docs/FICHA_DEL_JUEGO.md",
+    "credits": "docs/CREDITOS.md",
+    "preserved_by": "docs/PRESERVADO_POR.md"
+  },
+  "objects": [
+    {
+      "id": "dsr-bottle-baseline",
+      "digest": "sha256:993ded463f106fa834286072986647deedc55481c17b44c210d48442a9152a0d",
+      "roles": [
+        "game_payload",
+        "prefix_baseline",
+        "save",
+        "configuration",
+        "derived"
+      ],
+      "format": "tar.gz",
+      "required": true,
+      "archive_path": "objects/sha256/99/3d/993ded463f106fa834286072986647deedc55481c17b44c210d48442a9152a0d",
+      "shared": false,
+      "description": "Normalized Bottles full archive with .fvs2 removed after successful functional validation."
+    },
+    {
+      "id": "ge-proton11-1",
+      "digest": "sha256:37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
+      "roles": [
+        "runner"
+      ],
+      "format": "tar.gz",
+      "required": true,
+      "archive_path": "objects/sha256/37/82/37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
+      "shared": true,
+      "description": "Exact runner declared by the verified bottle."
+    },
+    {
+      "id": "gbe-api-regular-x64",
+      "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+      "roles": [
+        "derived"
+      ],
+      "format": "file",
+      "required": true,
+      "archive_path": "objects/sha256/cf/61/cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+      "shared": true,
+      "description": "Active locally built and audited gbe_fork steam_api64.dll."
+    },
+    {
+      "id": "steam-api64-original",
+      "digest": "sha256:a0a5ac6dcd3d9255bb9c71bae3a71b6bf90c56f4fce46ff0d65533d7ef89b8d8",
+      "roles": [
+        "original"
+      ],
+      "format": "file",
+      "required": true,
+      "archive_path": "objects/sha256/a0/a5/a0a5ac6dcd3d9255bb9c71bae3a71b6bf90c56f4fce46ff0d65533d7ef89b8d8",
+      "shared": false,
+      "description": "Original Steamworks DLL displaced by the active local reimplementation."
+    }
+  ],
+  "persistent_state": [
+    {
+      "id": "dsr-save",
+      "path": "drive_c/users/steamuser/Documents/NBGI/DARK SOULS REMASTERED/<PRIVATE_ACCOUNT_ID>/DRAKS0005.sl2",
+      "kind": "save",
+      "backup": true,
+      "sensitive": true,
+      "description": "Public fixture path is redacted; the private capsule must contain the exact path."
+    },
+    {
+      "id": "gbe-user-identity",
+      "path": "drive_c/users/steamuser/AppData/Roaming/GSE Saves/settings/configs.user.ini",
+      "kind": "identity",
+      "backup": true,
+      "sensitive": true,
+      "description": "Identity may be required to resolve the packaged save."
+    }
+  ],
+  "regenerable_state": [
+    {
+      "id": "dxvk-shader-cache",
+      "path": "cache/dxvk_shader",
+      "kind": "cache",
+      "backup": false,
+      "description": "Currently retained in the baseline; removability has not yet been validated."
+    }
+  ],
+  "privacy_exceptions": [
+    {
+      "id": "save-bound-user-identity",
+      "reason": "The private capsule may require the preserved identity to locate and load the save.",
+      "scope": [
+        "drive_c/users/steamuser/Documents/NBGI/DARK SOULS REMASTERED",
+        "drive_c/users/steamuser/AppData/Roaming/GSE Saves/settings/configs.user.ini"
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "linux-bottles-flatpak",
+      "platform": "linux",
+      "adapter": "bottles",
+      "status": "verified",
+      "dependencies": [
+        "dsr-bottle-baseline",
+        "ge-proton11-1"
+      ],
+      "host_contract": "host-contract.linux-bottles.json",
+      "launch": {
+        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
+        "arguments": [],
+        "network": "isolated"
+      },
+      "acceptance_report": "acceptance.json",
+      "notes": "The verified direct launch used bottles-cli with a dynamically discovered Unix path. The adapter must not hardcode the test host path."
+    },
+    {
+      "id": "linux-direct-wine",
+      "platform": "linux",
+      "adapter": "wine",
+      "status": "not_tested",
+      "dependencies": [
+        "dsr-bottle-baseline",
+        "ge-proton11-1"
+      ],
+      "host_contract": "host-contract.linux-bottles.json",
+      "launch": {
+        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
+        "arguments": [],
+        "network": "isolated"
+      },
+      "notes": "The source README describes this route, but it has not been validated."
+    },
+    {
+      "id": "windows-native",
+      "platform": "windows",
+      "adapter": "windows",
+      "status": "not_tested",
+      "dependencies": [
+        "dsr-bottle-baseline"
+      ],
+      "host_contract": "host-contract.linux-bottles.json",
+      "launch": {
+        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
+        "arguments": [],
+        "network": "host_default"
+      },
+      "notes": "Placeholder profile. A Windows-specific host contract must be created before this profile can become a candidate."
+    }
+  ]
+}

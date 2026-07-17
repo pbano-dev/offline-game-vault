@@ -1,0 +1,50 @@
+{
+  "schema": 0,
+  "contract_id": "linux-x86_64-bottles-flatpak-dsr",
+  "platform": "linux",
+  "architecture": [
+    "x86_64"
+  ],
+  "filesystem": {
+    "case_sensitive": "required",
+    "symlinks": "required",
+    "executable_bit": "required",
+    "colon_in_names": "required"
+  },
+  "capabilities": {
+    "flatpak": {
+      "level": "required",
+      "reason": "Required by the currently verified Bottles profile."
+    },
+    "user_namespaces": {
+      "level": "required",
+      "reason": "Required by the verified Flatpak execution route."
+    },
+    "network_namespaces": {
+      "level": "required",
+      "reason": "Required for the verified offline launcher."
+    },
+    "ntsync": {
+      "level": "required",
+      "reason": "The verified bottle is configured with ntsync; fallbacks are not yet tested."
+    },
+    "vulkan": {
+      "level": "required",
+      "reason": "The verified profile uses DXVK."
+    },
+    "wayland": {
+      "level": "not_required"
+    },
+    "x11": {
+      "level": "required",
+      "reason": "The tested bottle has native Wayland disabled."
+    },
+    "audio": {
+      "level": "required"
+    }
+  },
+  "graphics": {
+    "tested_backend": "vulkan"
+  },
+  "notes": "This contract records the verified profile, not all possible future recovery paths."
+}

@@ -1,0 +1,71 @@
+{
+  "schema": 0,
+  "capsule_id": "steam-570940-dark-souls-remastered-1.03.1",
+  "profile_id": "linux-bottles-flatpak",
+  "tested_at": "2026-07-17",
+  "result": "passed_with_limitations",
+  "tests": [
+    {
+      "id": "archive-import-without-fvs2",
+      "status": "passed",
+      "evidence": "Bottles reported successful import of the normalized archive without .fvs2."
+    },
+    {
+      "id": "game-launch",
+      "status": "passed",
+      "evidence": "DarkSoulsRemastered.exe reached gameplay."
+    },
+    {
+      "id": "existing-save-load",
+      "status": "passed",
+      "evidence": "An existing packaged save loaded successfully."
+    },
+    {
+      "id": "controller",
+      "status": "passed",
+      "evidence": "A connected controller worked in gameplay."
+    },
+    {
+      "id": "normal-exit",
+      "status": "passed",
+      "evidence": "The game closed normally."
+    },
+    {
+      "id": "offline-network-namespace",
+      "status": "passed",
+      "evidence": "The imported laboratory bottle ran through the existing network-isolation launcher."
+    },
+    {
+      "id": "direct-bottles-cli-launch",
+      "status": "passed",
+      "evidence": "Direct launch succeeded using the Unix path discovered from Bottles."
+    },
+    {
+      "id": "runner-auto-provision",
+      "status": "not_tested",
+      "notes": "The runner was already installed on the test host."
+    },
+    {
+      "id": "clean-host-restoration",
+      "status": "not_tested"
+    },
+    {
+      "id": "native-windows",
+      "status": "not_tested"
+    },
+    {
+      "id": "direct-wine-without-bottles",
+      "status": "not_tested"
+    },
+    {
+      "id": "portable-usb-export",
+      "status": "not_tested"
+    }
+  ],
+  "limitations": [
+    "The verified host already had ge-proton11-1 installed.",
+    "Flatpak and Bottles bootstrap from a clean offline host are not yet implemented.",
+    "The direct Wine and native Windows recovery profiles remain unverified.",
+    "The public fixture omits private save identity values."
+  ]
+}
