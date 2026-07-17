@@ -74,6 +74,38 @@ def canonical_object_path(vault_root: Path, digest: str) -> Path:
     )
 
 
+
+def _reject_vault_symlink_components(
+    *,
+    destination: Path,
+    vault_root: Path,
+) -> None:
+    """Reject symlinked path components below the resolved vault root."""
+
+    vault_root = vault_root.resolve()
+    destination = destination.absolute()
+
+    try:
+        relative = destination.relative_to(vault_root)
+    except ValueError as exc:
+        raise IngestError(
+            f"Destination escapes the vault root: {destination}"
+        ) from exc
+
+    current = vault_root
+    for component in relative.parts[:-1]:
+        current = current / component
+        if current.is_symlink():
+            raise IngestError(
+                "Vault destination contains a symbolic-link "
+                f"directory component: {current}"
+            )
+        if current.exists() and not current.is_dir():
+            raise IngestError(
+                "Vault destination parent is not a directory: "
+                f"{current}"
+            )
+
 def _copy_and_verify_source(
     *,
     source: Path,
@@ -273,6 +305,12 @@ def ingest_object(
     expected_size = destination_spec.expected_size
     object_id = destination_spec.object_id
 
+    if destination_spec.vault_root is not None:
+        _reject_vault_symlink_components(
+            destination=destination,
+            vault_root=destination_spec.vault_root,
+        )
+
     if destination.exists() or destination.is_symlink():
         return _verify_existing_destination(
             destination=destination,
@@ -282,6 +320,11 @@ def ingest_object(
         )
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination_spec.vault_root is not None:
+        _reject_vault_symlink_components(
+            destination=destination,
+            vault_root=destination_spec.vault_root,
+        )
 
     suffix = secrets.token_hex(8)
     temporary = destination.parent / (

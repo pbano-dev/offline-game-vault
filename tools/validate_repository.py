@@ -19,6 +19,7 @@ SCHEMA_FILES = {
     "host_contract": "host-contract.schema.json",
     "acceptance": "acceptance.schema.json",
     "receipt": "receipt.schema.json",
+    "vault_inventory": "vault-inventory.schema.json",
 }
 
 PRIVATE_PATTERNS = {

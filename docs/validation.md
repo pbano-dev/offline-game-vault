@@ -9,7 +9,7 @@ python tools/validate_repository.py
 
 The validator checks:
 
-- all JSON Schemas are valid Draft 2020-12 schemas;
+- all JSON Schemas, including the vault inventory schema, are valid Draft 2020-12 schemas;
 - each fixture `capsule.json` validates;
 - host contracts, acceptance reports, and receipts validate;
 - referenced documents and metadata files exist;
