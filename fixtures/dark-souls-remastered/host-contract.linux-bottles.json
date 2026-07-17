@@ -9,7 +9,7 @@
     "case_sensitive": "required",
     "symlinks": "required",
     "executable_bit": "required",
-    "colon_in_names": "required"
+    "colon_in_names": "not_required"
   },
   "capabilities": {
     "flatpak": {

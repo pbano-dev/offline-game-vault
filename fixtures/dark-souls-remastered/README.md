@@ -41,3 +41,10 @@ The following remain untested:
 - direct Wine recovery;
 - native Windows recovery;
 - portable USB export.
+
+## Fixture correction after repository review
+
+- Each unverified execution profile now references its own host contract.
+- `cache/dxvk_shader` is no longer classified as regenerable because deletion has not been tested.
+- The redacted save path uses `ACCOUNT_ID_REDACTED`, avoiding angle-bracket placeholders.
+- The verified Bottles contract does not require colon-bearing filenames.

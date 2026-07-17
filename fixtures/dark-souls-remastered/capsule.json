@@ -71,7 +71,7 @@
   "persistent_state": [
     {
       "id": "dsr-save",
-      "path": "drive_c/users/steamuser/Documents/NBGI/DARK SOULS REMASTERED/<PRIVATE_ACCOUNT_ID>/DRAKS0005.sl2",
+      "path": "drive_c/users/steamuser/Documents/NBGI/DARK SOULS REMASTERED/ACCOUNT_ID_REDACTED/DRAKS0005.sl2",
       "kind": "save",
       "backup": true,
       "sensitive": true,
@@ -84,15 +84,6 @@
       "backup": true,
       "sensitive": true,
       "description": "Identity may be required to resolve the packaged save."
-    }
-  ],
-  "regenerable_state": [
-    {
-      "id": "dxvk-shader-cache",
-      "path": "cache/dxvk_shader",
-      "kind": "cache",
-      "backup": false,
-      "description": "Currently retained in the baseline; removability has not yet been validated."
     }
   ],
   "privacy_exceptions": [
@@ -134,7 +125,7 @@
         "dsr-bottle-baseline",
         "ge-proton11-1"
       ],
-      "host_contract": "host-contract.linux-bottles.json",
+      "host_contract": "host-contract.linux-direct-wine.json",
       "launch": {
         "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
         "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
@@ -151,7 +142,7 @@
       "dependencies": [
         "dsr-bottle-baseline"
       ],
-      "host_contract": "host-contract.linux-bottles.json",
+      "host_contract": "host-contract.windows-native.json",
       "launch": {
         "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
         "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",

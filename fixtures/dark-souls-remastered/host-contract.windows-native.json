@@ -1,0 +1,46 @@
+{
+  "schema": 0,
+  "contract_id": "windows-x86_64-native-dsr-unverified",
+  "platform": "windows",
+  "architecture": [
+    "x86_64"
+  ],
+  "filesystem": {
+    "case_sensitive": "not_required",
+    "symlinks": "not_required",
+    "executable_bit": "not_required",
+    "colon_in_names": "not_required"
+  },
+  "capabilities": {
+    "flatpak": {
+      "level": "not_required"
+    },
+    "user_namespaces": {
+      "level": "not_required"
+    },
+    "network_namespaces": {
+      "level": "unknown",
+      "reason": "A native Windows isolation method has not been selected or tested."
+    },
+    "ntsync": {
+      "level": "not_required"
+    },
+    "vulkan": {
+      "level": "not_required",
+      "reason": "The intended native profile uses Windows Direct3D rather than DXVK."
+    },
+    "wayland": {
+      "level": "not_required"
+    },
+    "x11": {
+      "level": "not_required"
+    },
+    "audio": {
+      "level": "required"
+    }
+  },
+  "graphics": {
+    "tested_backend": "direct3d"
+  },
+  "notes": "Unverified recovery contract. Native Windows prerequisites and save migration must be tested before this profile can become a candidate."
+}

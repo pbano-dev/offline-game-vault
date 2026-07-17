@@ -1,0 +1,49 @@
+{
+  "schema": 0,
+  "contract_id": "linux-x86_64-direct-wine-dsr-unverified",
+  "platform": "linux",
+  "architecture": [
+    "x86_64"
+  ],
+  "filesystem": {
+    "case_sensitive": "required",
+    "symlinks": "required",
+    "executable_bit": "required",
+    "colon_in_names": "preferred"
+  },
+  "capabilities": {
+    "flatpak": {
+      "level": "not_required",
+      "reason": "This recovery profile is intended to run without Bottles or Flatpak."
+    },
+    "user_namespaces": {
+      "level": "unknown",
+      "reason": "The direct Wine route has not been tested."
+    },
+    "network_namespaces": {
+      "level": "preferred",
+      "reason": "Network isolation is required by policy, but the exact direct-Wine mechanism is not yet validated."
+    },
+    "ntsync": {
+      "level": "unknown",
+      "reason": "The archived bottle used ntsync; direct runner behavior is not yet tested."
+    },
+    "vulkan": {
+      "level": "required",
+      "reason": "The preserved prefix contains a DXVK-based configuration."
+    },
+    "wayland": {
+      "level": "unknown"
+    },
+    "x11": {
+      "level": "unknown"
+    },
+    "audio": {
+      "level": "required"
+    }
+  },
+  "graphics": {
+    "tested_backend": "unknown"
+  },
+  "notes": "Unverified recovery contract. The archive did not visibly contain dosdevices/, so direct use as a standard Wine prefix remains unproven."
+}
