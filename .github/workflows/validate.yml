@@ -9,9 +9,13 @@ permissions:
 
 jobs:
   validate:
-    name: Schemas, fixtures, and unit tests
+    name: Hygiene, schemas, fixtures, and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
+
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "src:tools"
 
     steps:
       - name: Check out repository
@@ -26,13 +30,18 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-ci.txt
 
-      - name: Install project and validator dependency
+      - name: Reject tracked generated or temporary files
+        run: python -B tools/check_repository_hygiene.py --tracked
+
+      - name: Install validator dependency
         run: |
-          python -m pip install --disable-pip-version-check -r requirements-ci.txt
-          python -m pip install --disable-pip-version-check --no-deps -e .
+          python -m pip install             --disable-pip-version-check             -r requirements-ci.txt
 
       - name: Validate repository metadata
-        run: python tools/validate_repository.py
+        run: python -B tools/validate_repository.py
 
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -v
+      - name: Run unit tests without writing bytecode
+        run: python -B -m unittest discover -s tests -v
+
+      - name: Reject files generated during CI
+        run: python -B tools/check_repository_hygiene.py --filesystem
