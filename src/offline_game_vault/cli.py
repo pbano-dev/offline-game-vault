@@ -10,6 +10,14 @@ from typing import Sequence
 
 from . import __version__
 from .planner import MaterializationPlan, PlanError, build_plan
+from .verifier import (
+    ObjectSpec,
+    VerificationResult,
+    VerifyError,
+    direct_object_spec,
+    resolve_capsule_object,
+    verify_object,
+)
 
 
 def _print_text_plan(plan: MaterializationPlan) -> None:
@@ -35,6 +43,28 @@ def _print_text_plan(plan: MaterializationPlan) -> None:
         )
 
 
+def _print_text_verification(result: VerificationResult) -> None:
+    print(f"Object:       {result.object_id or '(direct path)'}")
+    print(f"Path:         {result.path}")
+    print(f"Expected:     {result.expected_digest}")
+    print(f"Actual:       {result.actual_digest}")
+    print(f"Bytes:        {result.actual_size}")
+    if result.expected_size is not None:
+        print(f"Expected size: {result.expected_size}")
+        print(
+            "Size match:   "
+            + ("yes" if result.size_match else "NO")
+        )
+    print(
+        "Digest match: "
+        + ("yes" if result.digest_match else "NO")
+    )
+    print(
+        "Verified:     "
+        + ("yes" if result.verified else "NO")
+    )
+
+
 def _command_plan(args: argparse.Namespace) -> int:
     plan = build_plan(
         capsule_path=args.capsule,
@@ -56,6 +86,100 @@ def _command_plan(args: argparse.Namespace) -> int:
     else:
         _print_text_plan(plan)
     return 0
+
+
+def _object_spec_from_args(args: argparse.Namespace) -> ObjectSpec:
+    capsule_mode = any(
+        value is not None
+        for value in (
+            args.capsule,
+            args.object_id,
+            args.vault_root,
+        )
+    )
+    direct_mode = any(
+        value is not None
+        for value in (
+            args.path,
+            args.digest,
+            args.expected_size,
+        )
+    )
+
+    if capsule_mode and direct_mode:
+        raise VerifyError(
+            "Choose either capsule mode "
+            "(--capsule, --object-id, --vault-root) "
+            "or direct mode (--path, --digest)."
+        )
+
+    if capsule_mode:
+        missing = [
+            name
+            for name, value in (
+                ("--capsule", args.capsule),
+                ("--object-id", args.object_id),
+                ("--vault-root", args.vault_root),
+            )
+            if value is None
+        ]
+        if missing:
+            raise VerifyError(
+                "Capsule mode requires "
+                + ", ".join(missing)
+                + "."
+            )
+        return resolve_capsule_object(
+            capsule_path=args.capsule,
+            object_id=args.object_id,
+            vault_root=args.vault_root,
+        )
+
+    if direct_mode:
+        missing = [
+            name
+            for name, value in (
+                ("--path", args.path),
+                ("--digest", args.digest),
+            )
+            if value is None
+        ]
+        if missing:
+            raise VerifyError(
+                "Direct mode requires "
+                + ", ".join(missing)
+                + "."
+            )
+        return direct_object_spec(
+            path=args.path,
+            digest=args.digest,
+            expected_size=args.expected_size,
+        )
+
+    raise VerifyError(
+        "Provide capsule mode "
+        "(--capsule, --object-id, --vault-root) "
+        "or direct mode (--path, --digest)."
+    )
+
+
+def _command_verify_object(args: argparse.Namespace) -> int:
+    spec = _object_spec_from_args(args)
+    result = verify_object(spec)
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_text_verification(result)
+
+    return 0 if result.verified else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,6 +237,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plan.set_defaults(handler=_command_plan)
 
+    verify = commands.add_parser(
+        "verify-object",
+        help="Verify one immutable regular-file object.",
+    )
+    verify.add_argument(
+        "--capsule",
+        type=Path,
+        help="Capsule containing the object declaration.",
+    )
+    verify.add_argument(
+        "--object-id",
+        help="Object ID declared by the capsule.",
+    )
+    verify.add_argument(
+        "--vault-root",
+        type=Path,
+        help="Root of the immutable vault.",
+    )
+    verify.add_argument(
+        "--path",
+        type=Path,
+        help="Direct path to a regular-file object.",
+    )
+    verify.add_argument(
+        "--digest",
+        help="Expected lowercase sha256: digest in direct mode.",
+    )
+    verify.add_argument(
+        "--expected-size",
+        type=int,
+        help="Optional expected byte count in direct mode.",
+    )
+    verify.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    verify.set_defaults(handler=_command_verify_object)
+
     return parser
 
 
@@ -122,7 +285,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         return int(args.handler(args))
-    except PlanError as exc:
+    except (PlanError, VerifyError) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
