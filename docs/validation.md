@@ -22,3 +22,5 @@ The validator checks:
 
 This validation does not verify archived payload hashes because commercial
 payloads are outside Git.
+
+The unit suite also exercises safe tar extraction, staged materialization, receipt validation, and guarded removal.

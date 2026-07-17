@@ -15,6 +15,13 @@ from .inventory import (
     build_inventory,
     write_inventory_atomic,
 )
+from .materializer import (
+    MaterializationError,
+    MaterializationResult,
+    RemovalResult,
+    materialize_profile,
+    remove_materialization,
+)
 from .planner import MaterializationPlan, PlanError, build_plan
 from .profile_store import (
     ProfileIngestResult,
@@ -410,6 +417,89 @@ def _command_inventory(args: argparse.Namespace) -> int:
 
     return 0
 
+
+def _print_materialization(result: MaterializationResult) -> None:
+    print(f"Capsule:      {result.capsule_id}")
+    print(f"Profile:      {result.profile_id}")
+    print(f"Destination:  {result.destination}")
+    print(f"Objects:      {result.object_count}")
+    print(f"Complete:     {'yes' if result.complete else 'NO'}")
+    print(f"Receipt:      {result.receipt_id}")
+    for item in result.objects:
+        print(
+            f"  - {item.object_id}: {item.strategy}, "
+            f"verified={'yes' if item.verified else 'NO'}, "
+            f"members={item.member_count}, "
+            f"bytes={item.regular_bytes}, "
+            f"symlinks={item.symlink_count}, "
+            f"hardlinks={item.hardlink_count}"
+        )
+
+
+def _command_materialize(args: argparse.Namespace) -> int:
+    result = materialize_profile(
+        capsule_path=args.capsule,
+        profile_id=args.profile,
+        vault_root=args.vault_root,
+        destination=args.destination,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_materialization(result)
+
+    return 0 if result.complete else 1
+
+
+def _print_removal(result: RemovalResult) -> None:
+    print(f"Capsule:      {result.capsule_id}")
+    print(f"Profile:      {result.profile_id}")
+    print(f"Destination:  {result.destination}")
+    print(f"Removed:      {'yes' if result.removed else 'NO'}")
+    print(
+        "State declared: "
+        f"{result.persistent_state_declared}"
+    )
+    print(
+        "State preservation confirmed: "
+        + (
+            "yes"
+            if result.state_preservation_confirmed
+            else "no"
+        )
+    )
+
+
+def _command_remove_materialization(
+    args: argparse.Namespace,
+) -> int:
+    result = remove_materialization(
+        destination=args.destination,
+        confirm_state_preserved=args.confirm_state_preserved,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_removal(result)
+
+    return 0 if result.removed else 1
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ogv",
@@ -644,6 +734,73 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inventory_parser.set_defaults(handler=_command_inventory)
 
+
+    materialize_parser = commands.add_parser(
+        "materialize",
+        help=(
+            "Verify, safely stage, and atomically publish a profile."
+        ),
+    )
+    materialize_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Path to capsule.json.",
+    )
+    materialize_parser.add_argument(
+        "--profile",
+        required=True,
+        help="Execution profile ID.",
+    )
+    materialize_parser.add_argument(
+        "--vault-root",
+        type=Path,
+        required=True,
+        help="Root of the immutable vault.",
+    )
+    materialize_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help=(
+            "New host-local destination outside the vault. "
+            "It must not already exist."
+        ),
+    )
+    materialize_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    materialize_parser.set_defaults(handler=_command_materialize)
+
+    remove_parser = commands.add_parser(
+        "remove-materialization",
+        help="Safely detach and remove a recognized materialization.",
+    )
+    remove_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="Materialization directory containing its receipt.",
+    )
+    remove_parser.add_argument(
+        "--confirm-state-preserved",
+        action="store_true",
+        help=(
+            "Confirm that every preserve_on_remove state item "
+            "has already been backed up."
+        ),
+    )
+    remove_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    remove_parser.set_defaults(
+        handler=_command_remove_materialization
+    )
+
     return parser
 
 
@@ -659,6 +816,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         IngestError,
         ProfileStoreError,
         InventoryError,
+        MaterializationError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2
