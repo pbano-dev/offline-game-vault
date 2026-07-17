@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://offline-game-vault.invalid/schemas/receipt.schema.json",
+  "title": "Offline Game Vault materialization receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "receipt_id",
+    "capsule_id",
+    "profile_id",
+    "created_at",
+    "destination",
+    "objects",
+    "operations",
+    "persistent_state"
+  ],
+  "properties": {
+    "schema": {
+      "const": 0
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capsule_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "orchestrator_version": {
+      "type": "string"
+    },
+    "host_summary": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "destination": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "digest",
+          "destination",
+          "strategy",
+          "verified"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "destination": {
+            "type": "string",
+            "minLength": 1
+          },
+          "strategy": {
+            "enum": [
+              "copy",
+              "extract",
+              "reflink",
+              "hardlink",
+              "symlink",
+              "bind_mount",
+              "generated"
+            ]
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "enum": [
+              "copy",
+              "extract",
+              "configure",
+              "install",
+              "generate",
+              "verify",
+              "other"
+            ]
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "skipped",
+              "failed"
+            ]
+          },
+          "details": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "persistent_state": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "preserve_on_remove"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "preserve_on_remove": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "removal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "safe_to_remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "must_preserve": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
