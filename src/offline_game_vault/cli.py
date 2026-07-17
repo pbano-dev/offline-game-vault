@@ -10,6 +10,13 @@ from typing import Sequence
 
 from . import __version__
 from .planner import MaterializationPlan, PlanError, build_plan
+from .storage import (
+    IngestError,
+    IngestResult,
+    capsule_destination_spec,
+    direct_destination_spec,
+    ingest_object,
+)
 from .verifier import (
     ObjectSpec,
     VerificationResult,
@@ -182,6 +189,104 @@ def _command_verify_object(args: argparse.Namespace) -> int:
     return 0 if result.verified else 1
 
 
+
+def _print_text_ingest(result: IngestResult) -> None:
+    print(f"Object:       {result.object_id or '(direct digest)'}")
+    print(f"Source:       {result.source}")
+    print(f"Destination:  {result.destination}")
+    print(f"Digest:       {result.digest}")
+    print(f"Bytes:        {result.bytes}")
+    print(f"Status:       {result.status}")
+    print(
+        "Source verified:      "
+        + ("yes" if result.source_verified else "NO")
+    )
+    print(
+        "Destination verified: "
+        + ("yes" if result.destination_verified else "NO")
+    )
+
+
+def _destination_spec_from_ingest_args(
+    args: argparse.Namespace,
+) -> ObjectSpec:
+    capsule_mode = any(
+        value is not None
+        for value in (
+            args.capsule,
+            args.object_id,
+        )
+    )
+    direct_mode = any(
+        value is not None
+        for value in (
+            args.digest,
+            args.expected_size,
+        )
+    )
+
+    if capsule_mode and direct_mode:
+        raise IngestError(
+            "Choose either capsule mode "
+            "(--capsule, --object-id) "
+            "or direct mode (--digest)."
+        )
+
+    if capsule_mode:
+        missing = [
+            name
+            for name, value in (
+                ("--capsule", args.capsule),
+                ("--object-id", args.object_id),
+            )
+            if value is None
+        ]
+        if missing:
+            raise IngestError(
+                "Capsule mode requires "
+                + ", ".join(missing)
+                + "."
+            )
+        return capsule_destination_spec(
+            capsule_path=args.capsule,
+            object_id=args.object_id,
+            vault_root=args.vault_root,
+        )
+
+    if args.digest is not None:
+        return direct_destination_spec(
+            vault_root=args.vault_root,
+            digest=args.digest,
+            expected_size=args.expected_size,
+        )
+
+    raise IngestError(
+        "Provide capsule mode (--capsule, --object-id) "
+        "or direct mode (--digest)."
+    )
+
+
+def _command_ingest_object(args: argparse.Namespace) -> int:
+    destination_spec = _destination_spec_from_ingest_args(args)
+    result = ingest_object(
+        source=args.source,
+        destination_spec=destination_spec,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_text_ingest(result)
+
+    return 0
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ogv",
@@ -276,6 +381,48 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify.set_defaults(handler=_command_verify_object)
 
+
+    ingest = commands.add_parser(
+        "ingest-object",
+        help="Verify and atomically ingest one object into the vault.",
+    )
+    ingest.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        help="Source regular file outside or inside the host filesystem.",
+    )
+    ingest.add_argument(
+        "--vault-root",
+        type=Path,
+        required=True,
+        help="Root of the content-addressed vault.",
+    )
+    ingest.add_argument(
+        "--capsule",
+        type=Path,
+        help="Capsule containing the object declaration.",
+    )
+    ingest.add_argument(
+        "--object-id",
+        help="Object ID declared by the capsule.",
+    )
+    ingest.add_argument(
+        "--digest",
+        help="Expected lowercase sha256: digest in direct mode.",
+    )
+    ingest.add_argument(
+        "--expected-size",
+        type=int,
+        help="Optional expected byte count in direct mode.",
+    )
+    ingest.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    ingest.set_defaults(handler=_command_ingest_object)
+
     return parser
 
 
@@ -285,7 +432,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         return int(args.handler(args))
-    except (PlanError, VerifyError) as exc:
+    except (PlanError, VerifyError, IngestError) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
