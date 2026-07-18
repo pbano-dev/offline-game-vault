@@ -50,6 +50,17 @@ from .storage import (
     direct_destination_spec,
     ingest_object,
 )
+from .state_manager import (
+    CapsuleAuditResult,
+    StateBackupResult,
+    StateBackupVerification,
+    StateError,
+    StateRestoreResult,
+    audit_capsule,
+    preserve_state,
+    restore_state,
+    verify_state_backup,
+)
 from .verifier import (
     ObjectSpec,
     VerificationResult,
@@ -709,6 +720,172 @@ def _command_remove_bottles(args: argparse.Namespace) -> int:
     return 0 if result.removed else 1
 
 
+
+def _print_capsule_audit(result: CapsuleAuditResult) -> None:
+    print(f"Capsule:           {result.capsule_id or '(invalid)'}")
+    print(f"Objects:           {result.object_count}")
+    print(f"Profiles:          {result.profile_count}")
+    print(f"Persistent state:  {result.persistent_state_count}")
+    print(f"Backup state:      {result.backup_state_count}")
+    print(
+        "Definition digest: "
+        f"{result.state_definition_digest or '(unavailable)'}"
+    )
+    print(f"Errors:            {result.error_count}")
+    print(f"Warnings:          {result.warning_count}")
+    print(f"Valid:             {'yes' if result.valid else 'NO'}")
+    print(
+        "Operational:       "
+        + ("yes" if result.operational else "no")
+    )
+    for issue in result.issues:
+        print(
+            f"  - {issue.severity}: {issue.code} "
+            f"at {issue.context}: {issue.message}"
+        )
+
+
+def _command_audit_capsule(args: argparse.Namespace) -> int:
+    result = audit_capsule(capsule_path=args.capsule)
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_capsule_audit(result)
+    return 0 if result.valid else 1
+
+
+def _print_state_backup(result: StateBackupResult) -> None:
+    print(f"Capsule:             {result.capsule_id}")
+    print(f"Backup ID:           {result.backup_id}")
+    print(f"Kind:                {result.backup_kind}")
+    print(f"State items:         {result.item_count}")
+    print(f"Present:             {result.present_count}")
+    print(f"Missing:             {result.missing_count}")
+    print(f"Bytes:               {result.total_bytes}")
+    print(
+        "Stopped confirmed:   "
+        + ("yes" if result.stopped_confirmed else "NO")
+    )
+    print(f"Complete:            {'yes' if result.complete else 'NO'}")
+    for item in result.items:
+        print(
+            f"  - {item.id}: {item.entry_type}, "
+            f"present={'yes' if item.present else 'no'}, "
+            f"files={item.file_count}, "
+            f"directories={item.directory_count}, "
+            f"bytes={item.bytes}"
+        )
+
+
+def _command_preserve_state(args: argparse.Namespace) -> int:
+    result = preserve_state(
+        capsule_path=args.capsule,
+        state_root=args.state_root,
+        backup=args.backup,
+        confirm_stopped=args.confirm_stopped,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_state_backup(result)
+    return 0 if result.complete else 1
+
+
+def _print_state_verification(
+    result: StateBackupVerification,
+) -> None:
+    print(f"Capsule:      {result.capsule_id}")
+    print(f"Backup ID:    {result.backup_id or '(unavailable)'}")
+    print(f"Kind:         {result.backup_kind or '(unavailable)'}")
+    print(f"State items:  {result.item_count}")
+    print(f"Present:      {result.present_count}")
+    print(f"Missing:      {result.missing_count}")
+    print(f"Bytes:        {result.total_bytes}")
+    print(f"Verified:     {'yes' if result.verified else 'NO'}")
+    for problem in result.problems:
+        print(f"  - {problem}")
+
+
+def _command_verify_state_backup(
+    args: argparse.Namespace,
+) -> int:
+    result = verify_state_backup(
+        capsule_path=args.capsule,
+        backup=args.backup,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_state_verification(result)
+    return 0 if result.verified else 1
+
+
+def _print_state_restore(result: StateRestoreResult) -> None:
+    print(f"Capsule:             {result.capsule_id}")
+    print(f"Restore ID:          {result.restore_id}")
+    print(f"Backup ID:           {result.backup_id}")
+    print(f"Snapshot backup ID:  {result.snapshot_backup_id}")
+    print(f"State items:         {result.item_count}")
+    print(f"Restored:            {result.restored_count}")
+    print(f"Missing restored:    {result.missing_count}")
+    print(
+        "Stopped confirmed:   "
+        + ("yes" if result.stopped_confirmed else "NO")
+    )
+    print(
+        "Rollback performed:  "
+        + ("yes" if result.rollback_performed else "no")
+    )
+    print(
+        "Rollback complete:   "
+        + ("yes" if result.rollback_complete else "NO")
+    )
+    print(f"Complete:            {'yes' if result.complete else 'NO'}")
+
+
+def _command_restore_state(args: argparse.Namespace) -> int:
+    result = restore_state(
+        capsule_path=args.capsule,
+        state_root=args.state_root,
+        backup=args.backup,
+        snapshot=args.snapshot,
+        confirm_stopped=args.confirm_stopped,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_state_restore(result)
+    return 0 if result.complete else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ogv",
@@ -721,6 +898,137 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     commands = parser.add_subparsers(dest="command", required=True)
+
+    audit_capsule_parser = commands.add_parser(
+        "audit-capsule",
+        help="Audit capsule structure and operational state declarations.",
+    )
+    audit_capsule_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Path to capsule.json.",
+    )
+    audit_capsule_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized machine-readable audit.",
+    )
+    audit_capsule_parser.set_defaults(
+        handler=_command_audit_capsule
+    )
+
+    preserve_state_parser = commands.add_parser(
+        "preserve-state",
+        help="Create an atomic private backup of declared state.",
+    )
+    preserve_state_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Operational private capsule.",
+    )
+    preserve_state_parser.add_argument(
+        "--state-root",
+        type=Path,
+        required=True,
+        help=(
+            "Root below which persistent_state paths are resolved."
+        ),
+    )
+    preserve_state_parser.add_argument(
+        "--backup",
+        type=Path,
+        required=True,
+        help="New private backup directory; it must not exist.",
+    )
+    preserve_state_parser.add_argument(
+        "--confirm-stopped",
+        action="store_true",
+        help="Confirm all writers of the declared state are stopped.",
+    )
+    preserve_state_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized machine-readable result.",
+    )
+    preserve_state_parser.set_defaults(
+        handler=_command_preserve_state
+    )
+
+    verify_state_parser = commands.add_parser(
+        "verify-state-backup",
+        help="Verify one private state backup against its capsule.",
+    )
+    verify_state_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Operational private capsule.",
+    )
+    verify_state_parser.add_argument(
+        "--backup",
+        type=Path,
+        required=True,
+        help="Private backup directory.",
+    )
+    verify_state_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized machine-readable result.",
+    )
+    verify_state_parser.set_defaults(
+        handler=_command_verify_state_backup
+    )
+
+    restore_state_parser = commands.add_parser(
+        "restore-state",
+        help=(
+            "Restore verified state after an atomic pre-restore snapshot."
+        ),
+    )
+    restore_state_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Operational private capsule.",
+    )
+    restore_state_parser.add_argument(
+        "--state-root",
+        type=Path,
+        required=True,
+        help=(
+            "Root below which persistent_state paths are resolved."
+        ),
+    )
+    restore_state_parser.add_argument(
+        "--backup",
+        type=Path,
+        required=True,
+        help="Verified private backup to restore.",
+    )
+    restore_state_parser.add_argument(
+        "--snapshot",
+        type=Path,
+        required=True,
+        help=(
+            "New private directory for the mandatory pre-restore "
+            "snapshot and restore receipt."
+        ),
+    )
+    restore_state_parser.add_argument(
+        "--confirm-stopped",
+        action="store_true",
+        help="Confirm all writers of the declared state are stopped.",
+    )
+    restore_state_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized machine-readable result.",
+    )
+    restore_state_parser.set_defaults(
+        handler=_command_restore_state
+    )
 
     plan = commands.add_parser(
         "plan",
@@ -1193,6 +1501,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         InventoryError,
         MaterializationError,
         BottlesAdapterError,
+        StateError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2

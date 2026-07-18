@@ -2,7 +2,7 @@
 
 Status: **Draft**
 Schema generation: **0**
-Last updated: **2026-07-17**
+Last updated: **2026-07-18**
 
 ## 1. Purpose
 
@@ -311,3 +311,39 @@ Schemas use explicit integer generations beginning at `0`.
 Breaking semantic changes require a new generation or a documented migration.
 
 The orchestrator must reject unsupported future schema generations instead of guessing.
+
+## 17. Implemented persistent-state transaction
+
+The `0.7.0` state engine resolves capsule paths only below an explicit
+state root:
+
+```text
+private capsule
+→ audit state declaration
+→ capture private backup
+→ verify payload and receipt
+→ snapshot current live state
+→ restore verified backup
+→ verify live result
+→ retain restore receipt
+```
+
+The backup is not a materialization and is not an immutable game object. It is
+a private mutable-state artifact with its own receipt and lifecycle.
+
+Implemented commands:
+
+```text
+ogv audit-capsule
+ogv preserve-state
+ogv verify-state-backup
+ogv restore-state
+```
+
+A restore never starts without a verified source backup and a mandatory
+pre-restore snapshot. Touched items are rolled back from that snapshot if the
+transaction fails.
+
+Generation `0` deliberately rejects state symlinks, special files, and
+multiply linked regular files. Supporting those semantics later requires an
+explicit schema and adapter policy.

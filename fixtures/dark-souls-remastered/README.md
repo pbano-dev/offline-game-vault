@@ -48,3 +48,32 @@ The following remain untested:
 - `cache/dxvk_shader` is no longer classified as regenerable because deletion has not been tested.
 - The redacted save path uses `ACCOUNT_ID_REDACTED`, avoiding angle-bracket placeholders.
 - The verified Bottles contract does not require colon-bearing filenames.
+
+
+## Generic state-management migration
+
+The two persistent-state entries now explicitly declare `required: true`.
+
+This public fixture remains sanitized and is therefore intentionally
+non-operational for backup or restore:
+
+```bash
+ogv audit-capsule \
+  --capsule fixtures/dark-souls-remastered/capsule.json
+```
+
+The audit is expected to report a valid sanitized fixture with warnings and
+`operational: no`.
+
+Actual capture and restore require the private capsule with the exact save
+identifier:
+
+```bash
+ogv preserve-state \
+  --capsule <PRIVATE_CAPSULE> \
+  --state-root <DERIVED_BOTTLE_ROOT> \
+  --backup <NEW_PRIVATE_BACKUP> \
+  --confirm-stopped
+```
+
+No DSR path is embedded in the state-management implementation.

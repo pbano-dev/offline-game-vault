@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://offline-game-vault.invalid/schemas/state-backup.schema.json",
+  "title": "Offline Game Vault persistent-state backup",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "backup_id",
+    "capsule_id",
+    "state_definition_digest",
+    "created_at",
+    "orchestrator_version",
+    "backup_kind",
+    "stopped_confirmed",
+    "complete",
+    "items"
+  ],
+  "properties": {
+    "schema": {
+      "const": 0
+    },
+    "backup_id": {
+      "type": "string",
+      "pattern": "^state-backup-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "capsule_id": {
+      "$ref": "#/$defs/id"
+    },
+    "state_definition_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "orchestrator_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "backup_kind": {
+      "enum": [
+        "preserved",
+        "pre_restore_snapshot"
+      ]
+    },
+    "stopped_confirmed": {
+      "type": "boolean"
+    },
+    "complete": {
+      "const": true
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
+      },
+      "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "entry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "type",
+            "mode"
+          ],
+          "properties": {
+            "path": {
+              "anyOf": [
+                {
+                  "const": "."
+                },
+                {
+                  "$ref": "#/$defs/relativePath"
+                }
+              ]
+            },
+            "type": {
+              "const": "directory"
+            },
+            "mode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 511
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "type",
+            "mode",
+            "bytes",
+            "digest"
+          ],
+          "properties": {
+            "path": {
+              "anyOf": [
+                {
+                  "const": "."
+                },
+                {
+                  "$ref": "#/$defs/relativePath"
+                }
+              ]
+            },
+            "type": {
+              "const": "file"
+            },
+            "mode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 511
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ]
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "declared_path",
+        "kind",
+        "sensitive",
+        "required",
+        "present",
+        "entry_type",
+        "payload_path",
+        "file_count",
+        "directory_count",
+        "bytes",
+        "tree_digest",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "declared_path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "kind": {
+          "enum": [
+            "save",
+            "identity",
+            "configuration",
+            "cache",
+            "log",
+            "temporary",
+            "other"
+          ]
+        },
+        "sensitive": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "entry_type": {
+          "enum": [
+            "file",
+            "directory",
+            "missing"
+          ]
+        },
+        "payload_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "type": "string"
+              },
+              "then": {
+                "$ref": "#/$defs/relativePath"
+              }
+            }
+          ]
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "directory_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tree_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entry"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "present": {
+                "const": false
+              }
+            },
+            "required": [
+              "present"
+            ]
+          },
+          "then": {
+            "properties": {
+              "entry_type": {
+                "const": "missing"
+              },
+              "payload_path": {
+                "const": null
+              },
+              "file_count": {
+                "const": 0
+              },
+              "directory_count": {
+                "const": 0
+              },
+              "bytes": {
+                "const": 0
+              },
+              "tree_digest": {
+                "const": null
+              },
+              "entries": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "present": {
+                "const": true
+              }
+            },
+            "required": [
+              "present"
+            ]
+          },
+          "then": {
+            "properties": {
+              "entry_type": {
+                "enum": [
+                  "file",
+                  "directory"
+                ]
+              },
+              "payload_path": {
+                "type": "string"
+              },
+              "tree_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "entries": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

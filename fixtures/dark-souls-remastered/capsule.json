@@ -75,7 +75,8 @@
       "kind": "save",
       "backup": true,
       "sensitive": true,
-      "description": "Public fixture path is redacted; the private capsule must contain the exact path."
+      "description": "Public fixture path is redacted; the private capsule must contain the exact path.",
+      "required": true
     },
     {
       "id": "gbe-user-identity",
@@ -83,7 +84,8 @@
       "kind": "identity",
       "backup": true,
       "sensitive": true,
-      "description": "Identity may be required to resolve the packaged save."
+      "description": "Identity may be required to resolve the packaged save.",
+      "required": true
     }
   ],
   "privacy_exceptions": [

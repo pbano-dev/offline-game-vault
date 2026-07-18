@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://offline-game-vault.invalid/schemas/state-restore-receipt.schema.json",
+  "title": "Offline Game Vault persistent-state restore receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "restore_id",
+    "capsule_id",
+    "state_definition_digest",
+    "created_at",
+    "orchestrator_version",
+    "backup_id",
+    "snapshot_backup_id",
+    "stopped_confirmed",
+    "item_count",
+    "restored_items",
+    "status",
+    "failed_item",
+    "rollback_performed",
+    "rollback_complete",
+    "complete"
+  ],
+  "properties": {
+    "schema": {
+      "const": 0
+    },
+    "restore_id": {
+      "type": "string",
+      "pattern": "^state-restore-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "capsule_id": {
+      "$ref": "#/$defs/id"
+    },
+    "state_definition_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "orchestrator_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "backup_id": {
+      "type": "string",
+      "pattern": "^state-backup-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "snapshot_backup_id": {
+      "type": "string",
+      "pattern": "^state-backup-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "stopped_confirmed": {
+      "const": true
+    },
+    "item_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "restored_items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "uniqueItems": true
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "rolled_back",
+        "rollback_failed"
+      ]
+    },
+    "failed_item": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "rollback_performed": {
+      "type": "boolean"
+    },
+    "rollback_complete": {
+      "type": "boolean"
+    },
+    "complete": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "failed_item": {
+            "const": null
+          },
+          "rollback_performed": {
+            "const": false
+          },
+          "rollback_complete": {
+            "const": true
+          },
+          "complete": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "rolled_back",
+              "rollback_failed"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "failed_item": {
+            "type": "string"
+          },
+          "rollback_performed": {
+            "const": true
+          },
+          "complete": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "rolled_back"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rollback_complete": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "rollback_failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rollback_complete": {
+            "const": false
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

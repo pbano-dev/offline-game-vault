@@ -23,6 +23,8 @@ SCHEMA_FILES = {
     "bottles_deployment_receipt": (
         "bottles-deployment-receipt.schema.json"
     ),
+    "state_backup": "state-backup.schema.json",
+    "state_restore_receipt": "state-restore-receipt.schema.json",
 }
 
 PRIVATE_PATTERNS = {

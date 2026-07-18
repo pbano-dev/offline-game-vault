@@ -9,7 +9,7 @@ python tools/validate_repository.py
 
 The validator checks:
 
-- all JSON Schemas, including the vault inventory schema, are valid Draft 2020-12 schemas;
+- all JSON Schemas, including vault inventory and persistent-state receipts, are valid Draft 2020-12 schemas;
 - each fixture `capsule.json` validates;
 - host contracts, acceptance reports, and receipts validate;
 - referenced documents and metadata files exist;
@@ -38,3 +38,23 @@ The unit suite also verifies:
 - launch plans do not disclose the private managed path;
 - isolated profiles include `flatpak run --unshare=network`;
 - removal requires stopped and persistent-state confirmations.
+
+
+## Persistent-state validation
+
+The unit suite also verifies:
+
+- operational and sanitized capsule audit outcomes;
+- safe non-overlapping state paths;
+- mandatory stopped-process confirmation;
+- private `0700`/`0600` backup permissions;
+- regular-file and directory capture;
+- required and optional missing state;
+- SHA-256 and tree-manifest verification;
+- payload-tampering detection;
+- rejection of symlinks and multiple hard links;
+- mandatory pre-restore snapshots;
+- restored live-state verification;
+- rollback after an injected multi-item restore failure;
+- backup and restore receipts against their Draft 2020-12 schemas;
+- sanitized CLI and receipt output without absolute host paths.
