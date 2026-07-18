@@ -1,0 +1,156 @@
+{
+  "capsule_id": "steam-814380-sekiro-shadows-die-twice-1.06",
+  "documents": {
+    "credits": "docs/CREDITOS.md",
+    "game_sheet": "docs/FICHA_DEL_JUEGO.md",
+    "preserved_by": "docs/PRESERVADO_POR.md",
+    "readme": "docs/00_README.md"
+  },
+  "game": {
+    "appid": 814380,
+    "edition": "Steam package with installed depot 1039230; ownership proof retained separately",
+    "language": [
+      "Spanish"
+    ],
+    "preserved_version": "1.06",
+    "source_store": "Steam",
+    "title": "Sekiro: Shadows Die Twice"
+  },
+  "objects": [
+    {
+      "archive_path": "objects/sha256/62/fa/62fa51a9a55ed445cb44d6ea7451bc4b8dc2dcc09d4ebb7b6ad08e5a49d77662",
+      "description": "Verified Bottles Full Archive from the closed Sekiro package.",
+      "digest": "sha256:62fa51a9a55ed445cb44d6ea7451bc4b8dc2dcc09d4ebb7b6ad08e5a49d77662",
+      "format": "tar.gz",
+      "id": "sekiro-bottle-baseline",
+      "required": true,
+      "roles": [
+        "game_payload",
+        "prefix_baseline",
+        "save",
+        "configuration",
+        "derived"
+      ],
+      "shared": false,
+      "size": 15987727148
+    },
+    {
+      "archive_path": "objects/sha256/37/82/37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
+      "description": "Exact shared runner already preserved for DSR.",
+      "digest": "sha256:37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
+      "format": "tar.gz",
+      "id": "ge-proton11-1",
+      "required": true,
+      "roles": [
+        "runner"
+      ],
+      "shared": true,
+      "size": 528930444
+    },
+    {
+      "archive_path": "objects/sha256/cf/61/cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+      "description": "Active gbe_fork DLL identical to the audited DSR object.",
+      "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+      "format": "file",
+      "id": "gbe-api-regular-x64",
+      "required": true,
+      "roles": [
+        "derived"
+      ],
+      "shared": true,
+      "size": 6173184
+    },
+    {
+      "archive_path": "objects/sha256/fc/20/fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
+      "description": "Original Steamworks DLL preserved beside the active replacement.",
+      "digest": "sha256:fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
+      "format": "file",
+      "id": "sekiro-steam-api64-original",
+      "required": true,
+      "roles": [
+        "original"
+      ],
+      "shared": false,
+      "size": 119720
+    },
+    {
+      "archive_path": "objects/sha256/63/7a/637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
+      "description": "Original Steam executable with its original wrapper intact.",
+      "digest": "sha256:637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
+      "format": "file",
+      "id": "sekiro-executable-original",
+      "required": true,
+      "roles": [
+        "original"
+      ],
+      "shared": false,
+      "size": 68005144
+    },
+    {
+      "archive_path": "objects/sha256/18/9b/189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
+      "description": "Derived executable used by the candidate offline profile.",
+      "digest": "sha256:189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
+      "format": "file",
+      "id": "sekiro-executable-unpacked",
+      "required": true,
+      "roles": [
+        "derived"
+      ],
+      "shared": false,
+      "size": 67799112
+    }
+  ],
+  "persistent_state": [
+    {
+      "backup": true,
+      "description": "Public fixture path is redacted; the private capsule contains the exact account-bound path.",
+      "id": "sekiro-save",
+      "kind": "save",
+      "path": "drive_c/users/steamuser/AppData/Roaming/Sekiro/ACCOUNT_ID_REDACTED/S0000.sl2",
+      "required": true,
+      "sensitive": true
+    },
+    {
+      "backup": true,
+      "description": "Identity may be required to resolve the preserved save.",
+      "id": "gbe-user-identity",
+      "kind": "identity",
+      "path": "drive_c/users/steamuser/AppData/Roaming/GSE Saves/settings/configs.user.ini",
+      "required": true,
+      "sensitive": true
+    }
+  ],
+  "privacy_exceptions": [
+    {
+      "id": "save-bound-user-identity",
+      "reason": "The private capsule may require the preserved identity to locate and load the save.",
+      "scope": [
+        "drive_c/users/steamuser/AppData/Roaming/Sekiro",
+        "drive_c/users/steamuser/AppData/Roaming/GSE Saves/settings/configs.user.ini"
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "acceptance_report": "acceptance.json",
+      "adapter": "bottles",
+      "dependencies": [
+        "sekiro-bottle-baseline",
+        "ge-proton11-1"
+      ],
+      "host_contract": "host-contract.linux-bottles.json",
+      "id": "linux-bottles-flatpak",
+      "launch": {
+        "arguments": [],
+        "entrypoint": "drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
+        "network": "isolated",
+        "working_directory": "drive_c/Games/Sekiro"
+      },
+      "notes": "Clean restoration, restored-save loading, gameplay, normal game exit, and Bottles self-exit were verified. The exact run-bottles child return code was not persisted. Independent external-network denial remains untested.",
+      "platform": "linux",
+      "status": "verified"
+    }
+  ],
+  "sanitized_fixture": true,
+  "schema": 0
+}

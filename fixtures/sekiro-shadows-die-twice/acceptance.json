@@ -1,0 +1,72 @@
+{
+  "capsule_id": "steam-814380-sekiro-shadows-die-twice-1.06",
+  "limitations": [
+    "The exact run-bottles child return code was not captured for the clean-restoration session.",
+    "Independent external-network denial from inside the sandbox remains unverified.",
+    "Direct Wine and native Windows recovery have not been validated.",
+    "The public fixture excludes private save paths, private identity values, proprietary payload, and the artbook."
+  ],
+  "profile_id": "linux-bottles-flatpak",
+  "result": "passed_with_limitations",
+  "schema": 0,
+  "tested_at": "2026-07-18",
+  "tests": [
+    {
+      "evidence": "Application version 1.06 was observed during functional acceptance.",
+      "id": "version-1.06-observed",
+      "status": "passed"
+    },
+    {
+      "evidence": "The accepted persistent state was restored and the existing save loaded.",
+      "id": "restored-save-load",
+      "status": "passed"
+    },
+    {
+      "evidence": "Gameplay was functional after clean materialization, deployment, and state restoration.",
+      "id": "gameplay-after-clean-restoration",
+      "status": "passed"
+    },
+    {
+      "evidence": "The game was closed normally through its own flow.",
+      "id": "normal-game-exit",
+      "status": "passed"
+    },
+    {
+      "evidence": "Bottles exited without manual termination after the clean-restoration session.",
+      "id": "bottles-self-exit",
+      "status": "passed"
+    },
+    {
+      "evidence": "Two persistent-state items were present and the accepted backup verified.",
+      "id": "accepted-state-verification",
+      "status": "passed"
+    },
+    {
+      "evidence": "Six artbook files were inventoried by size and SHA-256 in the canonical collection.",
+      "id": "artbook-inventory",
+      "status": "passed"
+    },
+    {
+      "id": "exact-run-bottles-returncode",
+      "notes": "The exact child return code was not persisted in the clean-restoration recovery record.",
+      "status": "not_tested"
+    },
+    {
+      "id": "independent-external-network-denial",
+      "notes": "Offline gbe configuration is preserved, but an independent in-sandbox denial proof is not closed.",
+      "status": "not_tested"
+    },
+    {
+      "id": "direct-wine-without-bottles",
+      "status": "not_tested"
+    },
+    {
+      "id": "native-windows",
+      "status": "not_tested"
+    },
+    {
+      "id": "portable-usb-export",
+      "status": "not_tested"
+    }
+  ]
+}

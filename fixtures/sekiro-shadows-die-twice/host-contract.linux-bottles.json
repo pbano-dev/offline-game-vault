@@ -1,0 +1,43 @@
+{
+  "architecture": [
+    "x86_64"
+  ],
+  "capabilities": {
+    "audio": {
+      "level": "required"
+    },
+    "flatpak": {
+      "level": "required",
+      "reason": "Required by the candidate Bottles profile."
+    },
+    "network_namespaces": {
+      "level": "required",
+      "reason": "Required by the isolated launch policy."
+    },
+    "ntsync": {
+      "level": "required",
+      "reason": "The archived bottle is configured with ntsync."
+    },
+    "vulkan": {
+      "level": "required",
+      "reason": "The archived profile uses DXVK."
+    },
+    "x11": {
+      "level": "required",
+      "reason": "The archived bottle has native Wayland disabled."
+    }
+  },
+  "contract_id": "linux-x86_64-bottles-flatpak-sekiro-candidate",
+  "filesystem": {
+    "case_sensitive": "required",
+    "colon_in_names": "not_required",
+    "executable_bit": "required",
+    "symlinks": "required"
+  },
+  "graphics": {
+    "tested_backend": "vulkan"
+  },
+  "notes": "Candidate contract inherited from the verified DSR runtime profile; Sekiro runtime acceptance is pending.",
+  "platform": "linux",
+  "schema": 0
+}
