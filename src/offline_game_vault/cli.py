@@ -9,6 +9,18 @@ from pathlib import Path
 from typing import Sequence
 
 from . import __version__
+from .bottles_adapter import (
+    BottlesAdapterError,
+    BottlesDeploymentResult,
+    BottlesDeploymentVerification,
+    BottlesLaunchPlan,
+    BottlesRemovalResult,
+    build_bottles_launch_plan,
+    deploy_bottles_profile,
+    remove_bottles_deployment,
+    run_bottles_deployment,
+    verify_bottles_deployment,
+)
 from .inventory import (
     InventoryError,
     VaultInventory,
@@ -500,6 +512,203 @@ def _command_remove_materialization(
 
     return 0 if result.removed else 1
 
+
+
+def _print_bottles_deployment(
+    result: BottlesDeploymentResult,
+) -> None:
+    print(f"Capsule:          {result.capsule_id}")
+    print(f"Profile:          {result.profile_id}")
+    print(f"Bottle:           {result.bottle_name}")
+    print(f"Source object:    {result.source_object_id}")
+    print(f"Runner:           {result.runner}")
+    print(f"Entrypoint:       {result.entrypoint}")
+    print(f"Network:          {result.network}")
+    print(f"Regular bytes:    {result.regular_bytes}")
+    print(f"Files:            {result.file_count}")
+    print(f"Directories:      {result.directory_count}")
+    print(f"Symlinks:         {result.symlink_count}")
+    print(f"Complete:         {'yes' if result.complete else 'NO'}")
+    print(f"Deployment ID:    {result.deployment_id}")
+
+
+def _command_deploy_bottles(args: argparse.Namespace) -> int:
+    result = deploy_bottles_profile(
+        capsule_path=args.capsule,
+        profile_id=args.profile,
+        materialization=args.materialization,
+        bottles_path=args.bottles_path,
+        bottle_name=args.name,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_bottles_deployment(result)
+
+    return 0 if result.complete else 1
+
+
+def _print_bottles_verification(
+    result: BottlesDeploymentVerification,
+) -> None:
+    print(f"Capsule:              {result.capsule_id}")
+    print(f"Profile:              {result.profile_id}")
+    print(f"Bottle:               {result.bottle_name}")
+    print(f"Runner:               {result.runner}")
+    print(f"Entrypoint:           {result.entrypoint}")
+    print(f"Network:              {result.network}")
+    print(
+        "Receipt valid:        "
+        + ("yes" if result.receipt_valid else "NO")
+    )
+    print(
+        "Configuration valid:  "
+        + ("yes" if result.configuration_valid else "NO")
+    )
+    print(
+        "Entrypoint present:   "
+        + ("yes" if result.entrypoint_present else "NO")
+    )
+    print(
+        "Verified:             "
+        + ("yes" if result.verified else "NO")
+    )
+
+
+def _command_verify_bottles(args: argparse.Namespace) -> int:
+    result = verify_bottles_deployment(
+        bottles_path=args.bottles_path,
+        bottle_name=args.name,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_bottles_verification(result)
+
+    return 0 if result.verified else 1
+
+
+def _print_bottles_launch_plan(result: BottlesLaunchPlan) -> None:
+    print(f"Capsule:      {result.capsule_id}")
+    print(f"Profile:      {result.profile_id}")
+    print(f"Bottle:       {result.bottle_name}")
+    print(f"Entrypoint:   {result.entrypoint}")
+    print(f"Network:      {result.network}")
+    print(f"Flatpak app:  {result.flatpak_app}")
+    print("Command:")
+    print("  " + " ".join(result.command))
+
+
+def _command_plan_bottles_launch(args: argparse.Namespace) -> int:
+    result, _ = build_bottles_launch_plan(
+        bottles_path=args.bottles_path,
+        bottle_name=args.name,
+        flatpak_app=args.flatpak_app,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_bottles_launch_plan(result)
+
+    return 0
+
+
+def _command_run_bottles(args: argparse.Namespace) -> int:
+    result, returncode = run_bottles_deployment(
+        bottles_path=args.bottles_path,
+        bottle_name=args.name,
+        flatpak_app=args.flatpak_app,
+    )
+
+    if args.json:
+        document = result.to_dict()
+        document["returncode"] = returncode
+        print(
+            json.dumps(
+                document,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"Bottle:      {result.bottle_name}")
+        print(f"Network:     {result.network}")
+        print(f"Return code: {returncode}")
+
+    return returncode
+
+
+def _print_bottles_removal(result: BottlesRemovalResult) -> None:
+    print(f"Capsule:      {result.capsule_id}")
+    print(f"Profile:      {result.profile_id}")
+    print(f"Bottle:       {result.bottle_name}")
+    print(f"Removed:      {'yes' if result.removed else 'NO'}")
+    print(
+        "State declared: "
+        f"{result.persistent_state_declared}"
+    )
+    print(
+        "State preservation confirmed: "
+        + (
+            "yes"
+            if result.state_preservation_confirmed
+            else "no"
+        )
+    )
+    print(
+        "Stopped confirmed: "
+        + ("yes" if result.stopped_confirmed else "no")
+    )
+
+
+def _command_remove_bottles(args: argparse.Namespace) -> int:
+    result = remove_bottles_deployment(
+        bottles_path=args.bottles_path,
+        bottle_name=args.name,
+        confirm_state_preserved=args.confirm_state_preserved,
+        confirm_stopped=args.confirm_stopped,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_bottles_removal(result)
+
+    return 0 if result.removed else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ogv",
@@ -801,6 +1010,172 @@ def build_parser() -> argparse.ArgumentParser:
         handler=_command_remove_materialization
     )
 
+
+    deploy_bottles_parser = commands.add_parser(
+        "deploy-bottles",
+        help=(
+            "Copy a materialized bottle into Bottles as a mutable, "
+            "non-overwriting derivative."
+        ),
+    )
+    deploy_bottles_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Path to capsule.json.",
+    )
+    deploy_bottles_parser.add_argument(
+        "--profile",
+        required=True,
+        help="Bottles execution profile ID.",
+    )
+    deploy_bottles_parser.add_argument(
+        "--materialization",
+        type=Path,
+        required=True,
+        help="Verified materialization directory.",
+    )
+    deploy_bottles_parser.add_argument(
+        "--bottles-path",
+        type=Path,
+        required=True,
+        help="Effective managed bottles directory from bottles-cli.",
+    )
+    deploy_bottles_parser.add_argument(
+        "--name",
+        required=True,
+        help="New non-colliding mutable bottle name.",
+    )
+    deploy_bottles_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized machine-readable result.",
+    )
+    deploy_bottles_parser.set_defaults(
+        handler=_command_deploy_bottles
+    )
+
+    verify_bottles_parser = commands.add_parser(
+        "verify-bottles-deployment",
+        help="Verify one managed OGV Bottles derivative.",
+    )
+    verify_bottles_parser.add_argument(
+        "--bottles-path",
+        type=Path,
+        required=True,
+        help="Effective managed bottles directory.",
+    )
+    verify_bottles_parser.add_argument(
+        "--name",
+        required=True,
+        help="OGV deployment bottle name.",
+    )
+    verify_bottles_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    verify_bottles_parser.set_defaults(
+        handler=_command_verify_bottles
+    )
+
+    launch_plan_parser = commands.add_parser(
+        "plan-bottles-launch",
+        help="Build a sanitized Bottles Flatpak launch plan.",
+    )
+    launch_plan_parser.add_argument(
+        "--bottles-path",
+        type=Path,
+        required=True,
+        help="Effective managed bottles directory.",
+    )
+    launch_plan_parser.add_argument(
+        "--name",
+        required=True,
+        help="OGV deployment bottle name.",
+    )
+    launch_plan_parser.add_argument(
+        "--flatpak-app",
+        default="com.usebottles.bottles",
+        help="Bottles Flatpak application ID.",
+    )
+    launch_plan_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized machine-readable plan.",
+    )
+    launch_plan_parser.set_defaults(
+        handler=_command_plan_bottles_launch
+    )
+
+    run_bottles_parser = commands.add_parser(
+        "run-bottles",
+        help="Run a verified OGV deployment through Bottles Flatpak.",
+    )
+    run_bottles_parser.add_argument(
+        "--bottles-path",
+        type=Path,
+        required=True,
+        help="Effective managed bottles directory.",
+    )
+    run_bottles_parser.add_argument(
+        "--name",
+        required=True,
+        help="OGV deployment bottle name.",
+    )
+    run_bottles_parser.add_argument(
+        "--flatpak-app",
+        default="com.usebottles.bottles",
+        help="Bottles Flatpak application ID.",
+    )
+    run_bottles_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a sanitized launch result.",
+    )
+    run_bottles_parser.set_defaults(
+        handler=_command_run_bottles
+    )
+
+    remove_bottles_parser = commands.add_parser(
+        "remove-bottles-deployment",
+        help="Remove a recognized mutable Bottles derivative.",
+    )
+    remove_bottles_parser.add_argument(
+        "--bottles-path",
+        type=Path,
+        required=True,
+        help="Effective managed bottles directory.",
+    )
+    remove_bottles_parser.add_argument(
+        "--name",
+        required=True,
+        help="OGV deployment bottle name.",
+    )
+    remove_bottles_parser.add_argument(
+        "--confirm-state-preserved",
+        action="store_true",
+        help=(
+            "Confirm that all preserve_on_remove state was backed up."
+        ),
+    )
+    remove_bottles_parser.add_argument(
+        "--confirm-stopped",
+        action="store_true",
+        help=(
+            "Confirm Bottles and all processes using the deployment "
+            "are stopped."
+        ),
+    )
+    remove_bottles_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    remove_bottles_parser.set_defaults(
+        handler=_command_remove_bottles
+    )
+
     return parser
 
 
@@ -817,6 +1192,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ProfileStoreError,
         InventoryError,
         MaterializationError,
+        BottlesAdapterError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2

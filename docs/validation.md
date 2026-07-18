@@ -24,3 +24,17 @@ This validation does not verify archived payload hashes because commercial
 payloads are outside Git.
 
 The unit suite also exercises safe tar extraction, staged materialization, receipt validation, and guarded removal.
+
+## Bottles adapter validation
+
+The unit suite also verifies:
+
+- a materialized bottle is copied rather than modified in place;
+- existing managed bottle names are never overwritten;
+- source and staged trees match before identity rewriting;
+- unsafe or broken symlinks and special files are rejected;
+- `Name`, `Path`, and `Custom_Path` are rewritten only in the derivative;
+- deployment receipts validate against the Bottles deployment schema;
+- launch plans do not disclose the private managed path;
+- isolated profiles include `flatpak run --unshare=network`;
+- removal requires stopped and persistent-state confirmations.

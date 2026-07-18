@@ -1,0 +1,162 @@
+{
+  "$defs": {
+    "relativePath": {
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)(?!.*\\u0000).+$",
+      "type": "string"
+    }
+  },
+  "$id": "https://offline-game-vault.invalid/schemas/bottles-deployment-receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "const": "bottles-flatpak"
+    },
+    "bottle_name": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "type": "string"
+    },
+    "capsule_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "deployed_tree_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "deployment_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "destination": {
+      "const": "."
+    },
+    "launch": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entrypoint": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "network": {
+          "enum": [
+            "isolated",
+            "host_default"
+          ]
+        }
+      },
+      "required": [
+        "entrypoint",
+        "arguments",
+        "network"
+      ],
+      "type": "object"
+    },
+    "materialization_receipt_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "orchestrator_version": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "persistent_state": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "preserve_on_remove": {
+            "type": "boolean"
+          },
+          "sensitive": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "preserve_on_remove",
+          "sensitive"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "profile_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "removal": {
+      "additionalProperties": false,
+      "properties": {
+        "must_preserve": {
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "requires_stopped_confirmation": {
+          "const": true
+        }
+      },
+      "required": [
+        "requires_stopped_confirmation",
+        "must_preserve"
+      ],
+      "type": "object"
+    },
+    "runner": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema": {
+      "const": 0
+    },
+    "source_object_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "source_tree_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "deployment_id",
+    "created_at",
+    "orchestrator_version",
+    "adapter",
+    "capsule_id",
+    "profile_id",
+    "materialization_receipt_id",
+    "source_object_id",
+    "bottle_name",
+    "destination",
+    "runner",
+    "launch",
+    "source_tree_sha256",
+    "deployed_tree_sha256",
+    "persistent_state",
+    "removal"
+  ],
+  "title": "Offline Game Vault Bottles deployment receipt",
+  "type": "object"
+}

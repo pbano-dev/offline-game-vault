@@ -20,6 +20,9 @@ SCHEMA_FILES = {
     "acceptance": "acceptance.schema.json",
     "receipt": "receipt.schema.json",
     "vault_inventory": "vault-inventory.schema.json",
+    "bottles_deployment_receipt": (
+        "bottles-deployment-receipt.schema.json"
+    ),
 }
 
 PRIVATE_PATTERNS = {
