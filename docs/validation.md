@@ -58,3 +58,30 @@ The unit suite also verifies:
 - rollback after an injected multi-item restore failure;
 - backup and restore receipts against their Draft 2020-12 schemas;
 - sanitized CLI and receipt output without absolute host paths.
+
+## Playable direct-Wine validation
+
+The `0.9.0` suite additionally verifies:
+
+- capsule-schema validation of playable layout contracts;
+- exact mapping of every profile dependency;
+- rejection of overlapping or traversing layout paths;
+- reuse of the generic verified materializer and safe tar extractor;
+- filesystem capability probes before publication;
+- transactional accepted-state restoration;
+- regeneration of only declared prefix infrastructure;
+- runner-symlink containment;
+- protected executable and DLL identities;
+- automatic protection of archived Wine and Wineserver executables;
+- deterministic generated launchers that pass `bash -n`;
+- second execution without rematerialization;
+- play receipts and explicit non-instrumentation of window-ready latency;
+- default uninstall refusal after state changes;
+- verified state export and explicit discard policy;
+- removal of only registered top-level paths;
+- rollback when protected-file verification fails;
+- rejection of unsupported network-isolation claims;
+- no regression in Bottles, generic materialization, or state operations.
+
+The public Sekiro fixture records the accepted direct-Wine profile without
+including the game, runner, save, private identity, or raw logs.

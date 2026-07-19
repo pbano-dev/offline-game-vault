@@ -35,6 +35,17 @@ from .materializer import (
     remove_materialization,
 )
 from .planner import MaterializationPlan, PlanError, build_plan
+from .playable import (
+    PlayableError,
+    PlayableMaterializationResult,
+    PlayableRemovalResult,
+    PlayableVerificationResult,
+    PlayResult,
+    materialize_playable_profile,
+    remove_playable_profile,
+    run_playable_profile,
+    verify_playable_profile,
+)
 from .profile_store import (
     ProfileIngestResult,
     ProfileStoreError,
@@ -523,6 +534,163 @@ def _command_remove_materialization(
 
     return 0 if result.removed else 1
 
+
+
+def _print_playable_materialization(
+    result: PlayableMaterializationResult,
+) -> None:
+    print(f"Capsule:          {result.capsule_id}")
+    print(f"Profile:          {result.profile_id}")
+    print(f"Backend:          {result.backend}")
+    print(f"Destination:      {result.destination}")
+    print(f"Objects:          {result.object_count}")
+    print(f"Protected files:  {result.protected_file_count}")
+    print(f"State items:      {result.state_item_count}")
+    print(f"Reused:           {'yes' if result.reused else 'no'}")
+    print(f"Complete:         {'yes' if result.complete else 'NO'}")
+    print(f"Receipt:          {result.receipt_id}")
+
+
+def _print_play_result(result: PlayResult) -> None:
+    print(f"Capsule:              {result.capsule_id}")
+    print(f"Profile:              {result.profile_id}")
+    print(f"Backend:              {result.backend}")
+    print(f"Destination:          {result.destination}")
+    print(f"Preparation ms:       {result.preparation_ms}")
+    print(f"Process duration ms:  {result.process_duration_ms}")
+    print(f"Wineserver wait ms:   {result.wineserver_wait_ms}")
+    print(f"Total ms:             {result.total_ms}")
+    print(f"Game process rc:      {result.game_process_rc}")
+    print(f"Wineserver wait rc:   {result.wineserver_wait_rc}")
+    print(f"Complete:             {'yes' if result.complete else 'NO'}")
+
+
+def _command_materialize_playable(args: argparse.Namespace) -> int:
+    materialization = materialize_playable_profile(
+        capsule_path=args.capsule,
+        profile_id=args.profile,
+        vault_root=args.vault_root,
+        destination=args.destination,
+        state_backup=args.state_backup,
+    )
+    play_result = None
+    if args.play:
+        play_result = run_playable_profile(
+            destination=args.destination,
+        )
+
+    if args.json:
+        document: dict[str, object] = {
+            "materialization": materialization.to_dict(),
+        }
+        if play_result is not None:
+            document["play"] = play_result.to_dict()
+        print(
+            json.dumps(
+                document,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_playable_materialization(materialization)
+        if play_result is not None:
+            print()
+            _print_play_result(play_result)
+
+    if not materialization.complete:
+        return 1
+    if play_result is not None and not play_result.complete:
+        return (
+            play_result.wineserver_wait_rc
+            if play_result.wineserver_wait_rc != 0
+            else play_result.game_process_rc
+        )
+    return 0
+
+
+def _command_verify_playable(args: argparse.Namespace) -> int:
+    result = verify_playable_profile(
+        destination=args.destination,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"Capsule:          {result.capsule_id}")
+        print(f"Profile:          {result.profile_id}")
+        print(f"Backend:          {result.backend}")
+        print(f"Destination:      {result.destination}")
+        print(f"Protected files:  {result.protected_file_count}")
+        print(f"Verified:         {'yes' if result.verified else 'NO'}")
+    return 0 if result.verified else 1
+
+
+def _command_run_playable(args: argparse.Namespace) -> int:
+    arguments = list(args.arguments)
+    if arguments and arguments[0] == "--":
+        arguments = arguments[1:]
+    result = run_playable_profile(
+        destination=args.destination,
+        arguments=arguments,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_play_result(result)
+    if result.wineserver_wait_rc != 0:
+        return result.wineserver_wait_rc
+    return result.game_process_rc
+
+
+def _command_remove_playable(args: argparse.Namespace) -> int:
+    result = remove_playable_profile(
+        destination=args.destination,
+        export_state=args.export_state,
+        discard_state=args.discard_state,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"Capsule:                 {result.capsule_id}")
+        print(f"Profile:                 {result.profile_id}")
+        print(f"Backend:                 {result.backend}")
+        print(f"Destination:             {result.destination}")
+        print(
+            "Changed state detected:  "
+            + ("yes" if result.changed_state_detected else "no")
+        )
+        print(
+            "State exported:           "
+            + ("yes" if result.state_exported else "no")
+        )
+        print(
+            "Discard authorized:       "
+            + ("yes" if result.discard_state_authorized else "no")
+        )
+        print(f"Removed:                  {'yes' if result.removed else 'NO'}")
+    return 0 if result.removed else 1
 
 
 def _print_bottles_deployment(
@@ -1319,6 +1487,134 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
 
+    materialize_playable_parser = commands.add_parser(
+        "materialize-playable",
+        help=(
+            "Build or reuse a capsule-driven direct-Wine materialization."
+        ),
+    )
+    materialize_playable_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Path to a private operational capsule.json.",
+    )
+    materialize_playable_parser.add_argument(
+        "--profile",
+        required=True,
+        help="Direct-Wine profile ID with a playable contract.",
+    )
+    materialize_playable_parser.add_argument(
+        "--vault-root",
+        type=Path,
+        required=True,
+        help="Root of the immutable vault.",
+    )
+    materialize_playable_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="Host-local playable destination outside the vault.",
+    )
+    materialize_playable_parser.add_argument(
+        "--state-backup",
+        type=Path,
+        help=(
+            "Verified accepted-state backup. Required when the capsule "
+            "declares persistent state."
+        ),
+    )
+    materialize_playable_parser.add_argument(
+        "--play",
+        action="store_true",
+        help="Launch after successful materialization or reuse.",
+    )
+    materialize_playable_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable result.",
+    )
+    materialize_playable_parser.set_defaults(
+        handler=_command_materialize_playable
+    )
+
+    verify_playable_parser = commands.add_parser(
+        "verify-playable",
+        help="Verify a published playable materialization.",
+    )
+    verify_playable_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="Published playable materialization root.",
+    )
+    verify_playable_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable result.",
+    )
+    verify_playable_parser.set_defaults(
+        handler=_command_verify_playable
+    )
+
+    run_playable_parser = commands.add_parser(
+        "run-playable",
+        help="Run a verified direct-Wine playable materialization.",
+    )
+    run_playable_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="Published playable materialization root.",
+    )
+    run_playable_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the play receipt after the process exits.",
+    )
+    run_playable_parser.add_argument(
+        "arguments",
+        nargs=argparse.REMAINDER,
+        help="Additional game arguments after '--'.",
+    )
+    run_playable_parser.set_defaults(
+        handler=_command_run_playable
+    )
+
+    remove_playable_parser = commands.add_parser(
+        "remove-playable",
+        help=(
+            "Export or explicitly discard changed state, then remove a "
+            "recognized playable materialization."
+        ),
+    )
+    remove_playable_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="Published playable materialization root.",
+    )
+    removal_group = remove_playable_parser.add_mutually_exclusive_group()
+    removal_group.add_argument(
+        "--export-state",
+        type=Path,
+        help="Export and verify current state before removal.",
+    )
+    removal_group.add_argument(
+        "--discard-state",
+        action="store_true",
+        help="Explicitly authorize removal of changed state.",
+    )
+    remove_playable_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable result.",
+    )
+    remove_playable_parser.set_defaults(
+        handler=_command_remove_playable
+    )
+
+
     deploy_bottles_parser = commands.add_parser(
         "deploy-bottles",
         help=(
@@ -1500,6 +1796,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ProfileStoreError,
         InventoryError,
         MaterializationError,
+        PlayableError,
         BottlesAdapterError,
         StateError,
     ) as exc:

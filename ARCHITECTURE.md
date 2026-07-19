@@ -347,3 +347,70 @@ transaction fails.
 Generation `0` deliberately rejects state symlinks, special files, and
 multiply linked regular files. Supporting those semantics later requires an
 explicit schema and adapter policy.
+
+## 18. Playable materialization in 0.9.0
+
+Version `0.9.0` adds a capsule-driven direct-Wine path without replacing the
+existing generic materializer.
+
+The flow is:
+
+```text
+private operational capsule
+→ verify profile objects
+→ safe generic materialization
+→ map declared archive roots into prefix and runner
+→ complete only declared prefix infrastructure
+→ restore verified accepted state transactionally
+→ verify protected files
+→ publish atomically
+→ generate persistent play and uninstall launchers
+```
+
+The playable contract belongs to the execution profile. It declares:
+
+- object-to-layout mappings;
+- final prefix and runner roots;
+- exact Wine and Wineserver executables;
+- prefix completion operations;
+- protected files and expected identities;
+- launcher names;
+- runtime directories;
+- launch arguments, environment, and network policy.
+
+The engine never guesses archive roots, runner names, save paths, or protected
+file identities.
+
+### 18.1 Portable runtime
+
+Each published direct-Wine materialization contains a copy of the standard
+library-only portable runtime. The generated launchers therefore do not require
+Bottles or an installed OGV package.
+
+The runtime:
+
+- resolves every path relative to its own root;
+- verifies protected files before play or removal;
+- redirects `HOME`, temporary paths, XDG data, and `WINEPREFIX` under the
+  materialization;
+- invokes only the archived Wine and Wineserver;
+- writes a play receipt with preparation and process timings;
+- compares current state with the accepted baseline;
+- aborts removal by default when state changed;
+- exports and verifies state before removal when requested.
+
+Python 3 remains a host prerequisite for this generation. A portable Python
+object may become a future backend dependency.
+
+### 18.2 Explicit limitations
+
+Generation `0` of the direct-Wine backend does not implement network
+isolation. A profile declaring `network: isolated` is rejected rather than
+silently launched without isolation.
+
+The play receipt measures preparation, process duration, and Wineserver wait.
+It does not claim to measure the time at which a game window or menu becomes
+ready.
+
+Display, audio, and session sockets supplied by the host remain separate from
+persistent destination writes.

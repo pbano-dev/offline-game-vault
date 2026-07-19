@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://offline-game-vault.invalid/schemas/play-receipt.schema.json",
+  "title": "Offline Game Vault direct-Wine play receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "receipt_id",
+    "capsule_id",
+    "profile_id",
+    "backend",
+    "prepared_at",
+    "invoked_at",
+    "process_finished_at",
+    "finished_at",
+    "preparation_ms",
+    "process_duration_ms",
+    "wineserver_wait_ms",
+    "total_ms",
+    "game_process_rc",
+    "wineserver_wait_rc",
+    "startup_window_ready_ms",
+    "startup_window_ready_status",
+    "protected_file_count",
+    "complete"
+  ],
+  "properties": {
+    "schema": {
+      "const": 0
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^play-[0-9a-f]{32}$"
+    },
+    "capsule_id": {
+      "$ref": "#/$defs/id"
+    },
+    "profile_id": {
+      "$ref": "#/$defs/id"
+    },
+    "backend": {
+      "const": "wine"
+    },
+    "prepared_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "invoked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "process_finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "preparation_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "process_duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "wineserver_wait_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "game_process_rc": {
+      "type": "integer"
+    },
+    "wineserver_wait_rc": {
+      "type": "integer"
+    },
+    "startup_window_ready_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "startup_window_ready_status": {
+      "const": "not_instrumented"
+    },
+    "protected_file_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "complete": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    }
+  }
+}

@@ -188,7 +188,7 @@ class RepositoryFixtureTests(unittest.TestCase):
                     for pattern in PRIVATE_PATTERNS:
                         self.assertIsNone(pattern.search(text))
 
-    def test_optional_profiles_are_not_fabricated(self) -> None:
+    def test_optional_profiles_follow_recorded_evidence(self) -> None:
         sekiro = (
             FIXTURES_ROOT
             / "sekiro-shadows-die-twice"
@@ -203,13 +203,22 @@ class RepositoryFixtureTests(unittest.TestCase):
         }
         self.assertEqual(
             profile_ids,
-            {"linux-bottles-flatpak"},
+            {
+                "linux-bottles-flatpak",
+                "linux-direct-wine",
+            },
         )
-        self.assertFalse(
+        self.assertTrue(
             (
                 sekiro
                 / "host-contract.linux-direct-wine.json"
-            ).exists()
+            ).is_file()
+        )
+        self.assertTrue(
+            (
+                sekiro
+                / "acceptance.direct-wine.json"
+            ).is_file()
         )
         self.assertFalse(
             (

@@ -149,6 +149,86 @@
       "notes": "Clean restoration, restored-save loading, gameplay, normal game exit, and Bottles self-exit were verified. The exact run-bottles child return code was not persisted. Independent external-network denial remains untested.",
       "platform": "linux",
       "status": "verified"
+    },
+    {
+      "id": "linux-direct-wine",
+      "platform": "linux",
+      "adapter": "wine",
+      "status": "verified",
+      "dependencies": [
+        "sekiro-bottle-baseline",
+        "ge-proton11-1"
+      ],
+      "host_contract": "host-contract.linux-direct-wine.json",
+      "launch": {
+        "entrypoint": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
+        "working_directory": "prefix/drive_c/Games/Sekiro",
+        "arguments": [],
+        "network": "host_default",
+        "environment": {
+          "WINEDEBUG": "-all"
+        }
+      },
+      "playable": {
+        "schema": 0,
+        "backend": "wine",
+        "paths": {
+          "prefix": "prefix",
+          "runner": "runner/ge-proton11-1",
+          "wine": "runner/ge-proton11-1/files/bin/wine",
+          "wineserver": "runner/ge-proton11-1/files/bin/wineserver",
+          "runtime": "runtime",
+          "launcher": "jugar_sekiro.sh",
+          "uninstaller": "desinstalar_sekiro.sh"
+        },
+        "layout": [
+          {
+            "object": "sekiro-bottle-baseline",
+            "source": "Sekiro",
+            "destination": "prefix"
+          },
+          {
+            "object": "ge-proton11-1",
+            "source": "ge-proton11-1",
+            "destination": "runner/ge-proton11-1"
+          }
+        ],
+        "prefix_operations": [
+          {
+            "type": "mkdir",
+            "path": "prefix/dosdevices"
+          },
+          {
+            "type": "symlink",
+            "path": "prefix/dosdevices/c:",
+            "target": "../drive_c"
+          }
+        ],
+        "protected_files": [
+          {
+            "path": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
+            "digest": "sha256:189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
+            "size": 67799112
+          },
+          {
+            "path": "prefix/drive_c/Games/Sekiro/sekiro_ORIGINAL.exe",
+            "digest": "sha256:637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
+            "size": 68005144
+          },
+          {
+            "path": "prefix/drive_c/Games/Sekiro/steam_api64.dll",
+            "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+            "size": 6173184
+          },
+          {
+            "path": "prefix/drive_c/Games/Sekiro/steam_api64.dll.gbe_backup",
+            "digest": "sha256:fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
+            "size": 119720
+          }
+        ]
+      },
+      "acceptance_report": "acceptance.direct-wine.json",
+      "notes": "Materialization, direct launch without Bottles, a second launch through the persistent launcher, normal process exit, changed-save detection, verified state export, and protected uninstall were accepted on the reference host. Network denial and cross-host portability remain untested."
     }
   ],
   "sanitized_fixture": true,

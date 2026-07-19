@@ -9,6 +9,8 @@ Implemented command families:
 object verification and ingestion
 profile verification and inventory
 safe materialization and removal
+capsule-driven playable materialization for direct Wine
+persistent launchers and state-aware uninstall
 Bottles mutable deployment and execution
 generic persistent-state backup, verification, and restoration
 capsule operational audit
@@ -19,6 +21,7 @@ Start with:
 - `ARCHITECTURE.md`
 - `docs/validation.md`
 - `docs/cli-state-management.md`
+- `docs/cli-playable.md`
 - `fixtures/dark-souls-remastered/`
 
 ## Sanitized repository fixtures

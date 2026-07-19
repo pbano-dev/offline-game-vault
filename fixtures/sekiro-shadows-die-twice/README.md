@@ -18,6 +18,9 @@ runner, proprietary binary, or artbook.
 - The exact runner declaration is `ge-proton11-1`.
 - Clean restoration, restored-save loading, gameplay, normal game exit,
   and Bottles self-exit were verified.
+- Direct execution with the archived Wine runner was also accepted without
+  Bottles, including a second launcher run, normal rc 0 closure, changed-save
+  detection, verified state export, and protected uninstall.
 - The accepted state contains the save and gbe identity.
 - The artbook is preserved in the private collection but excluded from
   this public fixture.
@@ -54,15 +57,14 @@ Derived executable:
 
 ## Fixture status
 
-The Bottles profile is verified with limitations.
+The Bottles and direct-Wine profiles are verified with limitations.
 
 The following remain untested:
 
-- independent external-network denial from inside the sandbox;
-- direct Wine recovery;
+- independent external-network denial;
 - native Windows recovery;
 - portable USB export;
-- execution on a different host or user account.
+- execution on a different host, user account, or filesystem.
 
 The exact run-bottles child return code was not persisted during the
 clean-restoration recovery. Normal game exit and Bottles self-exit were
@@ -81,6 +83,8 @@ acceptance.json
 capsule.json
 docs/
 host-contract.linux-bottles.json
+host-contract.linux-direct-wine.json
+acceptance.direct-wine.json
 ```
 
 using the canonical sanitized documents and Bottles host contract.

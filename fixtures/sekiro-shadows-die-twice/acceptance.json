@@ -3,7 +3,6 @@
   "limitations": [
     "The exact run-bottles child return code was not captured for the clean-restoration session.",
     "Independent external-network denial from inside the sandbox remains unverified.",
-    "Direct Wine and native Windows recovery have not been validated.",
     "The public fixture excludes private save paths, private identity values, proprietary payload, and the artbook."
   ],
   "profile_id": "linux-bottles-flatpak",
@@ -58,7 +57,8 @@
     },
     {
       "id": "direct-wine-without-bottles",
-      "status": "not_tested"
+      "status": "passed",
+      "evidence": "Validated separately by acceptance.direct-wine.json: materialization, two launches, normal closure, state export, and protected uninstall passed."
     },
     {
       "id": "native-windows",

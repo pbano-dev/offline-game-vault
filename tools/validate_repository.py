@@ -25,6 +25,11 @@ SCHEMA_FILES = {
     ),
     "state_backup": "state-backup.schema.json",
     "state_restore_receipt": "state-restore-receipt.schema.json",
+    "playable_materialization_receipt": (
+        "playable-materialization-receipt.schema.json"
+    ),
+    "play_receipt": "play-receipt.schema.json",
+    "state_export": "state-export.schema.json",
 }
 
 PRIVATE_PATTERNS = {
