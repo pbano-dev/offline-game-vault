@@ -232,6 +232,107 @@ class RepositoryValidation:
                 f"does not match referencing profile {profile_id!r}"
             )
 
+
+    def check_object_granularity(
+        self,
+        capsule_path: Path,
+        capsule: dict[str, Any],
+    ) -> None:
+        objects = capsule.get("objects", [])
+        if not isinstance(objects, list):
+            return
+
+        game_objects: list[dict[str, Any]] = []
+        object_ids: set[str] = set()
+
+        for index, item in enumerate(objects):
+            if not isinstance(item, dict):
+                continue
+            object_id = item.get("id")
+            if isinstance(object_id, str):
+                object_ids.add(object_id)
+            roles_value = item.get("roles", [])
+            roles = set(roles_value) if isinstance(roles_value, list) else set()
+            context = (
+                f"{self.relative(capsule_path)} "
+                f"$.objects[{index}] ({object_id})"
+            )
+
+            if "game_payload" in roles:
+                game_objects.append(item)
+                if item.get("shared") is True:
+                    self.error(
+                        f"{context}: canonical game object must not be shared"
+                    )
+                if item.get("format") == "file":
+                    self.error(
+                        f"{context}: canonical game object must not be a "
+                        "single file"
+                    )
+                continue
+
+            if item.get("shared") is not True:
+                self.error(
+                    f"{context}: non-game first-class objects must be shared"
+                )
+            if not roles or not roles.issubset({"runner", "runtime"}):
+                self.error(
+                    f"{context}: additional first-class objects may only "
+                    "carry runner/runtime roles; embedded originals and "
+                    "derived files belong in embedded_artifacts"
+                )
+            if item.get("format") == "file":
+                self.error(
+                    f"{context}: shared runner/runtime object must not be a "
+                    "single embedded file"
+                )
+
+        if len(game_objects) != 1:
+            self.error(
+                f"{self.relative(capsule_path)}: expected exactly one "
+                "canonical game object with role 'game_payload', found "
+                f"{len(game_objects)}"
+            )
+            return
+
+        game_id = game_objects[0].get("id")
+        embedded = capsule.get("embedded_artifacts", [])
+        if not isinstance(embedded, list):
+            return
+
+        embedded_ids: set[str] = set()
+        for index, item in enumerate(embedded):
+            if not isinstance(item, dict):
+                continue
+            artifact_id = item.get("id")
+            context = (
+                f"{self.relative(capsule_path)} "
+                f"$.embedded_artifacts[{index}] ({artifact_id})"
+            )
+            if isinstance(artifact_id, str):
+                if artifact_id in object_ids:
+                    self.error(
+                        f"{context}: ID collides with a first-class object"
+                    )
+                if artifact_id in embedded_ids:
+                    self.error(f"{context}: duplicate embedded artifact ID")
+                embedded_ids.add(artifact_id)
+            if item.get("container_object") != game_id:
+                self.error(
+                    f"{context}: container_object must reference "
+                    f"{game_id!r}"
+                )
+
+        for index, profile in enumerate(capsule.get("profiles", [])):
+            if not isinstance(profile, dict):
+                continue
+            dependencies = profile.get("dependencies", [])
+            if isinstance(dependencies, list) and game_id not in dependencies:
+                self.error(
+                    f"{self.relative(capsule_path)} $.profiles[{index}]: "
+                    f"dependencies must include {game_id!r}"
+                )
+
     def validate_fixture(self, capsule_path: Path) -> None:
         self.fixture_count += 1
         fixture_dir = capsule_path.parent
@@ -247,6 +348,7 @@ class RepositoryValidation:
 
         self.validate_instance(capsule_path, capsule, "capsule")
         self.check_privacy(capsule_path, capsule)
+        self.check_object_granularity(capsule_path, capsule)
 
         if capsule.get("sanitized_fixture") is not True:
             self.error(

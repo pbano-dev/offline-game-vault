@@ -1,183 +1,94 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://offline-game-vault.invalid/schemas/capsule.schema.json",
-  "title": "Offline Game Vault capsule",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema",
-    "capsule_id",
-    "game",
-    "documents",
-    "objects",
-    "profiles"
-  ],
-  "properties": {
-    "schema": {
-      "const": 0
-    },
-    "capsule_id": {
-      "type": "string",
-      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
-    },
-    "sanitized_fixture": {
-      "type": "boolean",
-      "default": false
-    },
-    "game": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "title",
-        "source_store",
-        "preserved_version"
-      ],
-      "properties": {
-        "title": {
-          "type": "string",
-          "minLength": 1
-        },
-        "edition": {
-          "type": "string"
-        },
-        "source_store": {
-          "type": "string",
-          "minLength": 1
-        },
-        "appid": {
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "preserved_version": {
-          "type": "string",
-          "minLength": 1
-        },
-        "language": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "uniqueItems": true
-        }
-      }
-    },
-    "documents": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "readme",
-        "game_sheet",
-        "credits",
-        "preserved_by"
-      ],
-      "properties": {
-        "readme": {
-          "$ref": "#/$defs/relativePath"
-        },
-        "game_sheet": {
-          "$ref": "#/$defs/relativePath"
-        },
-        "credits": {
-          "$ref": "#/$defs/relativePath"
-        },
-        "preserved_by": {
-          "$ref": "#/$defs/relativePath"
-        }
-      }
-    },
-    "objects": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/object"
-      }
-    },
-    "persistent_state": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/stateItem"
-      }
-    },
-    "regenerable_state": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/stateItem"
-      }
-    },
-    "privacy_exceptions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "reason",
-          "scope"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1
-          },
-          "scope": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "$ref": "#/$defs/relativePath"
-            }
-          }
-        }
-      }
-    },
-    "profiles": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/profile"
-      }
-    }
-  },
   "$defs": {
     "digest": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
     },
-    "relativePath": {
-      "type": "string",
-      "minLength": 1,
-      "not": {
-        "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
-      },
-      "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
-    },
-    "object": {
-      "type": "object",
+    "embeddedArtifact": {
       "additionalProperties": false,
-      "required": [
-        "id",
-        "digest",
-        "roles",
-        "format",
-        "required"
-      ],
       "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        "container_object": {
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
         },
         "digest": {
           "$ref": "#/$defs/digest"
         },
+        "id": {
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        },
+        "license_note": {
+          "type": "string"
+        },
         "roles": {
-          "type": "array",
+          "items": {
+            "enum": [
+              "original",
+              "derived",
+              "configuration",
+              "save",
+              "tool",
+              "media",
+              "documentation",
+              "other"
+            ]
+          },
           "minItems": 1,
-          "uniqueItems": true,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "digest",
+        "roles",
+        "container_object"
+      ],
+      "type": "object"
+    },
+    "object": {
+      "additionalProperties": false,
+      "properties": {
+        "archive_path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "description": {
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "format": {
+          "enum": [
+            "file",
+            "directory",
+            "tar",
+            "tar.gz",
+            "tar.zst",
+            "zip",
+            "flatpak_repo",
+            "other"
+          ]
+        },
+        "id": {
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        },
+        "license_note": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "roles": {
           "items": {
             "enum": [
               "game_payload",
@@ -193,57 +104,299 @@
               "documentation",
               "other"
             ]
-          }
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
         },
-        "format": {
-          "enum": [
-            "file",
-            "directory",
-            "tar",
-            "tar.gz",
-            "tar.zst",
-            "zip",
-            "flatpak_repo",
-            "other"
-          ]
-        },
-        "required": {
+        "shared": {
+          "default": false,
           "type": "boolean"
         },
         "size": {
-          "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "digest",
+        "roles",
+        "format",
+        "required"
+      ],
+      "type": "object"
+    },
+    "playable": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "const": "wine"
         },
-        "archive_path": {
+        "layout": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "destination": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "object": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "source": {
+                "$ref": "#/$defs/relativePath"
+              }
+            },
+            "required": [
+              "object",
+              "source",
+              "destination"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "paths": {
+          "additionalProperties": false,
+          "properties": {
+            "launcher": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "prefix": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "runner": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "runtime": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "uninstaller": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "wine": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "wineserver": {
+              "$ref": "#/$defs/relativePath"
+            }
+          },
+          "required": [
+            "prefix",
+            "runner",
+            "wine",
+            "wineserver",
+            "runtime",
+            "launcher",
+            "uninstaller"
+          ],
+          "type": "object"
+        },
+        "prefix_operations": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "$ref": "#/$defs/relativePath"
+                  },
+                  "type": {
+                    "const": "mkdir"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "$ref": "#/$defs/relativePath"
+                  },
+                  "target": {
+                    "minLength": 1,
+                    "not": {
+                      "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
+                    },
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "symlink"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path",
+                  "target"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "protected_files": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "size": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "digest"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema": {
+          "const": 0
+        }
+      },
+      "required": [
+        "schema",
+        "backend",
+        "paths",
+        "layout",
+        "protected_files"
+      ],
+      "type": "object"
+    },
+    "profile": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance_report": {
           "$ref": "#/$defs/relativePath"
         },
-        "shared": {
-          "type": "boolean",
-          "default": false
+        "adapter": {
+          "enum": [
+            "bottles",
+            "wine",
+            "umu",
+            "windows",
+            "vm",
+            "other"
+          ]
+        },
+        "dependencies": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "host_contract": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "id": {
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        },
+        "launch": {
+          "additionalProperties": false,
+          "properties": {
+            "arguments": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "entrypoint": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "environment": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "network": {
+              "enum": [
+                "isolated",
+                "allowed",
+                "host_default"
+              ]
+            },
+            "working_directory": {
+              "$ref": "#/$defs/relativePath"
+            }
+          },
+          "required": [
+            "entrypoint"
+          ],
+          "type": "object"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "platform": {
+          "enum": [
+            "linux",
+            "windows"
+          ]
+        },
+        "playable": {
+          "$ref": "#/$defs/playable"
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "candidate",
+            "experimental",
+            "not_tested",
+            "unavailable"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "platform",
+        "adapter",
+        "status",
+        "dependencies",
+        "host_contract",
+        "launch"
+      ],
+      "type": "object"
+    },
+    "relativePath": {
+      "minLength": 1,
+      "not": {
+        "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
+      },
+      "pattern": "^(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
+      "type": "string"
+    },
+    "stateItem": {
+      "additionalProperties": false,
+      "properties": {
+        "backup": {
+          "default": true,
+          "type": "boolean"
         },
         "description": {
           "type": "string"
         },
-        "license_note": {
-          "type": "string"
-        }
-      }
-    },
-    "stateItem": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "path",
-        "kind"
-      ],
-      "properties": {
         "id": {
-          "type": "string",
-          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
-        },
-        "path": {
-          "$ref": "#/$defs/relativePath"
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "type": "string"
         },
         "kind": {
           "enum": [
@@ -256,271 +409,175 @@
             "other"
           ]
         },
-        "backup": {
-          "type": "boolean",
-          "default": true
-        },
-        "sensitive": {
-          "type": "boolean",
-          "default": false
-        },
-        "description": {
-          "type": "string"
+        "path": {
+          "$ref": "#/$defs/relativePath"
         },
         "required": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
+        },
+        "sensitive": {
+          "default": false,
+          "type": "boolean"
         }
-      }
-    },
-    "profile": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
         "id",
-        "platform",
-        "adapter",
-        "status",
-        "dependencies",
-        "host_contract",
-        "launch"
+        "path",
+        "kind"
       ],
+      "type": "object"
+    }
+  },
+  "$id": "https://offline-game-vault.invalid/schemas/capsule.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capsule_id": {
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "documents": {
+      "additionalProperties": false,
       "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
-        },
-        "platform": {
-          "enum": [
-            "linux",
-            "windows"
-          ]
-        },
-        "adapter": {
-          "enum": [
-            "bottles",
-            "wine",
-            "umu",
-            "windows",
-            "vm",
-            "other"
-          ]
-        },
-        "status": {
-          "enum": [
-            "verified",
-            "candidate",
-            "experimental",
-            "not_tested",
-            "unavailable"
-          ]
-        },
-        "dependencies": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "uniqueItems": true
-        },
-        "host_contract": {
+        "credits": {
           "$ref": "#/$defs/relativePath"
         },
-        "launch": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "entrypoint"
-          ],
-          "properties": {
-            "entrypoint": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "working_directory": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "arguments": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "network": {
-              "enum": [
-                "isolated",
-                "allowed",
-                "host_default"
-              ]
-            },
-            "environment": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "acceptance_report": {
+        "game_sheet": {
           "$ref": "#/$defs/relativePath"
         },
-        "notes": {
+        "preserved_by": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "readme": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "required": [
+        "readme",
+        "game_sheet",
+        "credits",
+        "preserved_by"
+      ],
+      "type": "object"
+    },
+    "embedded_artifacts": {
+      "items": {
+        "$ref": "#/$defs/embeddedArtifact"
+      },
+      "type": "array"
+    },
+    "game": {
+      "additionalProperties": false,
+      "properties": {
+        "appid": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "edition": {
           "type": "string"
         },
-        "playable": {
-          "$ref": "#/$defs/playable"
+        "language": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "preserved_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_store": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
         }
-      }
-    },
-    "playable": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "schema",
-        "backend",
-        "paths",
-        "layout",
-        "protected_files"
+        "title",
+        "source_store",
+        "preserved_version"
       ],
-      "properties": {
-        "schema": {
-          "const": 0
-        },
-        "backend": {
-          "const": "wine"
-        },
-        "paths": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "prefix",
-            "runner",
-            "wine",
-            "wineserver",
-            "runtime",
-            "launcher",
-            "uninstaller"
-          ],
-          "properties": {
-            "prefix": {
+      "type": "object"
+    },
+    "objects": {
+      "description": "First-class objects only: one canonical game object plus shared runner/runtime archives. Internal critical files belong in embedded_artifacts.",
+      "items": {
+        "$ref": "#/$defs/object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "persistent_state": {
+      "items": {
+        "$ref": "#/$defs/stateItem"
+      },
+      "type": "array"
+    },
+    "privacy_exceptions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "items": {
               "$ref": "#/$defs/relativePath"
             },
-            "runner": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "wine": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "wineserver": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "runtime": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "launcher": {
-              "$ref": "#/$defs/relativePath"
-            },
-            "uninstaller": {
-              "$ref": "#/$defs/relativePath"
-            }
+            "minItems": 1,
+            "type": "array"
           }
         },
-        "layout": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "object",
-              "source",
-              "destination"
-            ],
-            "properties": {
-              "object": {
-                "type": "string",
-                "minLength": 1
-              },
-              "source": {
-                "$ref": "#/$defs/relativePath"
-              },
-              "destination": {
-                "$ref": "#/$defs/relativePath"
-              }
-            }
-          }
-        },
-        "prefix_operations": {
-          "type": "array",
-          "items": {
-            "oneOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type",
-                  "path"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "mkdir"
-                  },
-                  "path": {
-                    "$ref": "#/$defs/relativePath"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type",
-                  "path",
-                  "target"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "symlink"
-                  },
-                  "path": {
-                    "$ref": "#/$defs/relativePath"
-                  },
-                  "target": {
-                    "type": "string",
-                    "minLength": 1,
-                    "not": {
-                      "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
-                    }
-                  }
-                }
-              }
-            ]
-          }
-        },
-        "protected_files": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "path",
-              "digest"
-            ],
-            "properties": {
-              "path": {
-                "$ref": "#/$defs/relativePath"
-              },
-              "digest": {
-                "$ref": "#/$defs/digest"
-              },
-              "size": {
-                "type": "integer",
-                "minimum": 0
-              }
-            }
-          }
-        }
-      }
+        "required": [
+          "id",
+          "reason",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/profile"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "regenerable_state": {
+      "items": {
+        "$ref": "#/$defs/stateItem"
+      },
+      "type": "array"
+    },
+    "sanitized_fixture": {
+      "default": false,
+      "type": "boolean"
+    },
+    "schema": {
+      "const": 0
     }
-  }
+  },
+  "required": [
+    "schema",
+    "capsule_id",
+    "game",
+    "documents",
+    "objects",
+    "profiles"
+  ],
+  "title": "Offline Game Vault capsule",
+  "type": "object"
 }

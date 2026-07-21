@@ -1,23 +1,45 @@
 {
-  "schema": 0,
   "capsule_id": "steam-570940-dark-souls-remastered-1.03.1",
-  "sanitized_fixture": true,
-  "game": {
-    "title": "DARK SOULS REMASTERED",
-    "source_store": "Steam",
-    "appid": 570940,
-    "preserved_version": "application 1.03.1 / regulation 1.04"
-  },
   "documents": {
-    "readme": "docs/00_README.md",
-    "game_sheet": "docs/FICHA_DEL_JUEGO.md",
     "credits": "docs/CREDITOS.md",
-    "preserved_by": "docs/PRESERVADO_POR.md"
+    "game_sheet": "docs/FICHA_DEL_JUEGO.md",
+    "preserved_by": "docs/PRESERVADO_POR.md",
+    "readme": "docs/00_README.md"
+  },
+  "embedded_artifacts": [
+    {
+      "container_object": "dsr-bottle-baseline",
+      "description": "Active locally built and audited gbe_fork steam_api64.dll.",
+      "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+      "id": "gbe-api-regular-x64",
+      "roles": [
+        "derived"
+      ]
+    },
+    {
+      "container_object": "dsr-bottle-baseline",
+      "description": "Original Steamworks DLL displaced by the active local reimplementation.",
+      "digest": "sha256:a0a5ac6dcd3d9255bb9c71bae3a71b6bf90c56f4fce46ff0d65533d7ef89b8d8",
+      "id": "steam-api64-original",
+      "roles": [
+        "original"
+      ]
+    }
+  ],
+  "game": {
+    "appid": 570940,
+    "preserved_version": "application 1.03.1 / regulation 1.04",
+    "source_store": "Steam",
+    "title": "DARK SOULS REMASTERED"
   },
   "objects": [
     {
-      "id": "dsr-bottle-baseline",
+      "archive_path": "objects/sha256/99/3d/993ded463f106fa834286072986647deedc55481c17b44c210d48442a9152a0d",
+      "description": "Normalized Bottles full archive with .fvs2 removed after successful functional validation.",
       "digest": "sha256:993ded463f106fa834286072986647deedc55481c17b44c210d48442a9152a0d",
+      "format": "tar.gz",
+      "id": "dsr-bottle-baseline",
+      "required": true,
       "roles": [
         "game_payload",
         "prefix_baseline",
@@ -25,67 +47,39 @@
         "configuration",
         "derived"
       ],
-      "format": "tar.gz",
-      "required": true,
-      "archive_path": "objects/sha256/99/3d/993ded463f106fa834286072986647deedc55481c17b44c210d48442a9152a0d",
-      "shared": false,
-      "description": "Normalized Bottles full archive with .fvs2 removed after successful functional validation."
+      "shared": false
     },
     {
-      "id": "ge-proton11-1",
+      "archive_path": "objects/sha256/37/82/37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
+      "description": "Exact runner declared by the verified bottle.",
       "digest": "sha256:37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
+      "format": "tar.gz",
+      "id": "ge-proton11-1",
+      "required": true,
       "roles": [
         "runner"
       ],
-      "format": "tar.gz",
-      "required": true,
-      "archive_path": "objects/sha256/37/82/37820bc84240d5b786b5d2324fdb8c96c8328f4ce320560a1c2f47859fbe13fc",
-      "shared": true,
-      "description": "Exact runner declared by the verified bottle."
-    },
-    {
-      "id": "gbe-api-regular-x64",
-      "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
-      "roles": [
-        "derived"
-      ],
-      "format": "file",
-      "required": true,
-      "archive_path": "objects/sha256/cf/61/cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
-      "shared": true,
-      "description": "Active locally built and audited gbe_fork steam_api64.dll."
-    },
-    {
-      "id": "steam-api64-original",
-      "digest": "sha256:a0a5ac6dcd3d9255bb9c71bae3a71b6bf90c56f4fce46ff0d65533d7ef89b8d8",
-      "roles": [
-        "original"
-      ],
-      "format": "file",
-      "required": true,
-      "archive_path": "objects/sha256/a0/a5/a0a5ac6dcd3d9255bb9c71bae3a71b6bf90c56f4fce46ff0d65533d7ef89b8d8",
-      "shared": false,
-      "description": "Original Steamworks DLL displaced by the active local reimplementation."
+      "shared": true
     }
   ],
   "persistent_state": [
     {
-      "id": "dsr-save",
-      "path": "drive_c/users/steamuser/Documents/NBGI/DARK SOULS REMASTERED/ACCOUNT_ID_REDACTED/DRAKS0005.sl2",
-      "kind": "save",
       "backup": true,
-      "sensitive": true,
       "description": "Public fixture path is redacted; the private capsule must contain the exact path.",
-      "required": true
+      "id": "dsr-save",
+      "kind": "save",
+      "path": "drive_c/users/steamuser/Documents/NBGI/DARK SOULS REMASTERED/ACCOUNT_ID_REDACTED/DRAKS0005.sl2",
+      "required": true,
+      "sensitive": true
     },
     {
-      "id": "gbe-user-identity",
-      "path": "drive_c/users/steamuser/AppData/Roaming/GSE Saves/settings/configs.user.ini",
-      "kind": "identity",
       "backup": true,
-      "sensitive": true,
       "description": "Identity may be required to resolve the packaged save.",
-      "required": true
+      "id": "gbe-user-identity",
+      "kind": "identity",
+      "path": "drive_c/users/steamuser/AppData/Roaming/GSE Saves/settings/configs.user.ini",
+      "required": true,
+      "sensitive": true
     }
   ],
   "privacy_exceptions": [
@@ -100,58 +94,60 @@
   ],
   "profiles": [
     {
-      "id": "linux-bottles-flatpak",
-      "platform": "linux",
+      "acceptance_report": "acceptance.json",
       "adapter": "bottles",
-      "status": "verified",
       "dependencies": [
         "dsr-bottle-baseline",
         "ge-proton11-1"
       ],
       "host_contract": "host-contract.linux-bottles.json",
+      "id": "linux-bottles-flatpak",
       "launch": {
-        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
-        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
         "arguments": [],
-        "network": "isolated"
+        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "network": "isolated",
+        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED"
       },
-      "acceptance_report": "acceptance.json",
-      "notes": "The verified direct launch used bottles-cli with a dynamically discovered Unix path. The adapter must not hardcode the test host path."
+      "notes": "The verified direct launch used bottles-cli with a dynamically discovered Unix path. The adapter must not hardcode the test host path.",
+      "platform": "linux",
+      "status": "verified"
     },
     {
-      "id": "linux-direct-wine",
-      "platform": "linux",
       "adapter": "wine",
-      "status": "not_tested",
       "dependencies": [
         "dsr-bottle-baseline",
         "ge-proton11-1"
       ],
       "host_contract": "host-contract.linux-direct-wine.json",
+      "id": "linux-direct-wine",
       "launch": {
-        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
-        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
         "arguments": [],
-        "network": "isolated"
+        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "network": "isolated",
+        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED"
       },
-      "notes": "The source README describes this route, but it has not been validated."
+      "notes": "The source README describes this route, but it has not been validated.",
+      "platform": "linux",
+      "status": "not_tested"
     },
     {
-      "id": "windows-native",
-      "platform": "windows",
       "adapter": "windows",
-      "status": "not_tested",
       "dependencies": [
         "dsr-bottle-baseline"
       ],
       "host_contract": "host-contract.windows-native.json",
+      "id": "windows-native",
       "launch": {
-        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
-        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED",
         "arguments": [],
-        "network": "host_default"
+        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "network": "host_default",
+        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED"
       },
-      "notes": "Placeholder profile. A Windows-specific host contract must be created before this profile can become a candidate."
+      "notes": "Placeholder profile. A Windows-specific host contract must be created before this profile can become a candidate.",
+      "platform": "windows",
+      "status": "not_tested"
     }
-  ]
+  ],
+  "sanitized_fixture": true,
+  "schema": 0
 }

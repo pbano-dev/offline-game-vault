@@ -94,6 +94,28 @@ Mutable data that may be deleted:
 
 A file that merely looks like a cache is not regenerable until proven so. Media Converter/Foz data is one known counterexample.
 
+### 4.6 Canonical object granularity
+
+A capsule declares exactly one first-class **game object**. That object is the
+self-contained archival unit for the title and contains the preserved game
+payload together with originals, derived binaries, configuration, and any
+prefix baseline intentionally included in that archive.
+
+Runners and runtimes are separate first-class objects only when they are shared
+execution dependencies. A runner or runtime object is archived once and may be
+referenced by multiple capsules by exact digest.
+
+Files already contained inside the canonical game object are not additional
+vault objects. Their identity is recorded as embedded artifacts, protected
+files, provenance, or acceptance evidence. Original executables, prepared
+executables, original Steamworks DLLs, and local Steamworks reimplementations
+must not be duplicated as first-class objects when their exact bytes are
+already preserved inside the game object.
+
+For a collection with `N` games, adding a title normally adds one game object.
+It adds a runner or runtime object only when that exact shared execution object
+is not already present.
+
 ## 5. Primary operations
 
 The future orchestrator exposes, conceptually:

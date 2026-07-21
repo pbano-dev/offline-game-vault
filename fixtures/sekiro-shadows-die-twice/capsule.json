@@ -6,6 +6,48 @@
     "preserved_by": "docs/PRESERVADO_POR.md",
     "readme": "docs/00_README.md"
   },
+  "embedded_artifacts": [
+    {
+      "container_object": "sekiro-bottle-baseline",
+      "description": "Active gbe_fork DLL identical to the audited DSR object.",
+      "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+      "id": "gbe-api-regular-x64",
+      "roles": [
+        "derived"
+      ],
+      "size": 6173184
+    },
+    {
+      "container_object": "sekiro-bottle-baseline",
+      "description": "Original Steam executable with its original wrapper intact.",
+      "digest": "sha256:637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
+      "id": "sekiro-executable-original",
+      "roles": [
+        "original"
+      ],
+      "size": 68005144
+    },
+    {
+      "container_object": "sekiro-bottle-baseline",
+      "description": "Derived executable used by the candidate offline profile.",
+      "digest": "sha256:189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
+      "id": "sekiro-executable-unpacked",
+      "roles": [
+        "derived"
+      ],
+      "size": 67799112
+    },
+    {
+      "container_object": "sekiro-bottle-baseline",
+      "description": "Original Steamworks DLL preserved beside the active replacement.",
+      "digest": "sha256:fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
+      "id": "sekiro-steam-api64-original",
+      "roles": [
+        "original"
+      ],
+      "size": 119720
+    }
+  ],
   "game": {
     "appid": 814380,
     "edition": "Steam package with installed depot 1039230; ownership proof retained separately",
@@ -46,58 +88,6 @@
       ],
       "shared": true,
       "size": 528930444
-    },
-    {
-      "archive_path": "objects/sha256/cf/61/cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
-      "description": "Active gbe_fork DLL identical to the audited DSR object.",
-      "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
-      "format": "file",
-      "id": "gbe-api-regular-x64",
-      "required": true,
-      "roles": [
-        "derived"
-      ],
-      "shared": true,
-      "size": 6173184
-    },
-    {
-      "archive_path": "objects/sha256/fc/20/fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
-      "description": "Original Steamworks DLL preserved beside the active replacement.",
-      "digest": "sha256:fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
-      "format": "file",
-      "id": "sekiro-steam-api64-original",
-      "required": true,
-      "roles": [
-        "original"
-      ],
-      "shared": false,
-      "size": 119720
-    },
-    {
-      "archive_path": "objects/sha256/63/7a/637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
-      "description": "Original Steam executable with its original wrapper intact.",
-      "digest": "sha256:637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
-      "format": "file",
-      "id": "sekiro-executable-original",
-      "required": true,
-      "roles": [
-        "original"
-      ],
-      "shared": false,
-      "size": 68005144
-    },
-    {
-      "archive_path": "objects/sha256/18/9b/189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
-      "description": "Derived executable used by the candidate offline profile.",
-      "digest": "sha256:189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
-      "format": "file",
-      "id": "sekiro-executable-unpacked",
-      "required": true,
-      "roles": [
-        "derived"
-      ],
-      "shared": false,
-      "size": 67799112
     }
   ],
   "persistent_state": [
@@ -151,84 +141,84 @@
       "status": "verified"
     },
     {
-      "id": "linux-direct-wine",
-      "platform": "linux",
+      "acceptance_report": "acceptance.direct-wine.json",
       "adapter": "wine",
-      "status": "verified",
       "dependencies": [
         "sekiro-bottle-baseline",
         "ge-proton11-1"
       ],
       "host_contract": "host-contract.linux-direct-wine.json",
+      "id": "linux-direct-wine",
       "launch": {
-        "entrypoint": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
-        "working_directory": "prefix/drive_c/Games/Sekiro",
         "arguments": [],
-        "network": "host_default",
+        "entrypoint": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
         "environment": {
           "WINEDEBUG": "-all"
-        }
-      },
-      "playable": {
-        "schema": 0,
-        "backend": "wine",
-        "paths": {
-          "prefix": "prefix",
-          "runner": "runner/ge-proton11-1",
-          "wine": "runner/ge-proton11-1/files/bin/wine",
-          "wineserver": "runner/ge-proton11-1/files/bin/wineserver",
-          "runtime": "runtime",
-          "launcher": "jugar_sekiro.sh",
-          "uninstaller": "desinstalar_sekiro.sh"
         },
+        "network": "host_default",
+        "working_directory": "prefix/drive_c/Games/Sekiro"
+      },
+      "notes": "Materialization, direct launch without Bottles, a second launch through the persistent launcher, normal process exit, changed-save detection, verified state export, and protected uninstall were accepted on the reference host. Network denial and cross-host portability remain untested.",
+      "platform": "linux",
+      "playable": {
+        "backend": "wine",
         "layout": [
           {
+            "destination": "prefix",
             "object": "sekiro-bottle-baseline",
-            "source": "Sekiro",
-            "destination": "prefix"
+            "source": "Sekiro"
           },
           {
+            "destination": "runner/ge-proton11-1",
             "object": "ge-proton11-1",
-            "source": "ge-proton11-1",
-            "destination": "runner/ge-proton11-1"
+            "source": "ge-proton11-1"
           }
         ],
+        "paths": {
+          "launcher": "jugar_sekiro.sh",
+          "prefix": "prefix",
+          "runner": "runner/ge-proton11-1",
+          "runtime": "runtime",
+          "uninstaller": "desinstalar_sekiro.sh",
+          "wine": "runner/ge-proton11-1/files/bin/wine",
+          "wineserver": "runner/ge-proton11-1/files/bin/wineserver"
+        },
         "prefix_operations": [
           {
-            "type": "mkdir",
-            "path": "prefix/dosdevices"
+            "path": "prefix/dosdevices",
+            "type": "mkdir"
           },
           {
-            "type": "symlink",
             "path": "prefix/dosdevices/c:",
-            "target": "../drive_c"
+            "target": "../drive_c",
+            "type": "symlink"
           }
         ],
         "protected_files": [
           {
-            "path": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
             "digest": "sha256:189b2fed665473c565d983a01c5af87f80d15e5446a74262801077fb1a6fd17c",
+            "path": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
             "size": 67799112
           },
           {
-            "path": "prefix/drive_c/Games/Sekiro/sekiro_ORIGINAL.exe",
             "digest": "sha256:637aca527538c0ec6e1f136c8ed66046e95dfbdbb1f51926e134d9916398b856",
+            "path": "prefix/drive_c/Games/Sekiro/sekiro_ORIGINAL.exe",
             "size": 68005144
           },
           {
-            "path": "prefix/drive_c/Games/Sekiro/steam_api64.dll",
             "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+            "path": "prefix/drive_c/Games/Sekiro/steam_api64.dll",
             "size": 6173184
           },
           {
-            "path": "prefix/drive_c/Games/Sekiro/steam_api64.dll.gbe_backup",
             "digest": "sha256:fc20547408a7c34f0bd4946a34c21aab48a75e3b98dce9e55969f486d37b212f",
+            "path": "prefix/drive_c/Games/Sekiro/steam_api64.dll.gbe_backup",
             "size": 119720
           }
-        ]
+        ],
+        "schema": 0
       },
-      "acceptance_report": "acceptance.direct-wine.json",
-      "notes": "Materialization, direct launch without Bottles, a second launch through the persistent launcher, normal process exit, changed-save detection, verified state export, and protected uninstall were accepted on the reference host. Network denial and cross-host portability remain untested."
+      "status": "verified"
     }
   ],
   "sanitized_fixture": true,

@@ -85,3 +85,15 @@ The `0.9.0` suite additionally verifies:
 
 The public Sekiro fixture records the accepted direct-Wine profile without
 including the game, runner, save, private identity, or raw logs.
+
+## Canonical object-granularity validation
+
+Repository validation also enforces:
+
+- exactly one non-shared object with the `game_payload` role per fixture;
+- every other first-class object is a shared runner or runtime archive;
+- embedded originals and derived binaries are recorded under
+  `embedded_artifacts`, not under `objects`;
+- every embedded artifact names the canonical game object that contains it;
+- profile dependencies include the canonical game object;
+- embedded artifact IDs do not collide with first-class object IDs.

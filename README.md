@@ -38,3 +38,9 @@ Current fixtures:
 All fixtures share the same core structure. Additional host contracts are
 optional and must correspond to profiles declared by that fixture. A missing
 untested profile is not filled by copying another game's contract.
+
+Fixture object granularity follows the canonical archive model: one
+self-contained game object per title plus exact shared runner or runtime
+objects. Executables and DLLs already contained in the game object are recorded
+as embedded artifacts or protected files, not duplicated as first-class vault
+objects.
