@@ -1,0 +1,74 @@
+{
+  "capsule_id": "steam-570940-dark-souls-remastered-1.03.1",
+  "limitations": [
+    "Controller support remains deferred for Direct-Wine.",
+    "The generic OGV launcher does not claim network isolation; strict containment was validated separately.",
+    "Cross-host and long-term restoration remain untested."
+  ],
+  "profile_id": "linux-direct-wine",
+  "result": "passed_with_limitations",
+  "schema": 0,
+  "tested_at": "2026-07-20",
+  "tests": [
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.manual_launcher=passed.",
+      "id": "manual-direct-wine-launch",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.clean_restoration=passed.",
+      "id": "clean-restoration",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.relocation=passed.",
+      "id": "relocation",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.save_load=passed.",
+      "id": "existing-save-load",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.video=passed.",
+      "id": "video",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.audio=passed.",
+      "id": "audio",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.normal_close=passed.",
+      "id": "normal-close",
+      "status": "passed"
+    },
+    {
+      "evidence": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.strict_containment=passed-separately.",
+      "id": "strict-containment-separate-launcher",
+      "status": "passed"
+    },
+    {
+      "evidence": "The accepted DSR Direct-Wine profile already declares WINEDLLOVERRIDES=mscoree=d;winemenubuilder.exe=d; the owner confirmed this is the configuration that removed the Wine Mono installer prompt.",
+      "id": "wine-mono-prompt-suppression",
+      "status": "passed"
+    },
+    {
+      "id": "controller",
+      "notes": "04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json: validation.controller=deferred.",
+      "status": "not_tested"
+    },
+    {
+      "id": "generic-launcher-network-denial",
+      "notes": "The generic OGV profile deliberately declares network=host_default. Strict containment was accepted with a separate launcher.",
+      "status": "not_tested"
+    },
+    {
+      "id": "cross-host-portability",
+      "notes": "The accepted route was not repeated on another host, user, or filesystem.",
+      "status": "not_tested"
+    }
+  ]
+}

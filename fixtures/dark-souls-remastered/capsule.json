@@ -113,6 +113,7 @@
       "status": "verified"
     },
     {
+      "acceptance_report": "acceptance.direct-wine.json",
       "adapter": "wine",
       "dependencies": [
         "dsr-bottle-baseline",
@@ -122,13 +123,71 @@
       "id": "linux-direct-wine",
       "launch": {
         "arguments": [],
-        "entrypoint": "drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
-        "network": "isolated",
-        "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED"
+        "entrypoint": "prefix/drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+        "environment": {
+          "DXVK_LOG_LEVEL": "none",
+          "WINEDEBUG": "-all",
+          "WINEDLLOVERRIDES": "mscoree=d;winemenubuilder.exe=d"
+        },
+        "network": "host_default",
+        "working_directory": "prefix/drive_c/Games/DARK_SOULS_REMASTERED"
       },
-      "notes": "The source README describes this route, but it has not been validated.",
+      "notes": "Direct-Wine execution verified with the preserved baseline and ge-proton11-1: existing save, integrated Artorias content, video, audio, normal close, clean restoration and relocation. Controller support remains deferred. The generic OGV launcher declares host_default; strict network and device containment was validated separately with jugar_570940.sh.",
       "platform": "linux",
-      "status": "not_tested"
+      "playable": {
+        "backend": "wine",
+        "layout": [
+          {
+            "destination": "prefix",
+            "object": "dsr-bottle-baseline",
+            "source": "DarkSouls-Remastered-LAB-NO-FVS2"
+          },
+          {
+            "destination": "runner/ge-proton11-1",
+            "object": "ge-proton11-1",
+            "source": "ge-proton11-1"
+          }
+        ],
+        "paths": {
+          "launcher": "jugar_570940.sh",
+          "prefix": "prefix",
+          "runner": "runner/ge-proton11-1",
+          "runtime": "runtime",
+          "uninstaller": "desinstalar_570940.sh",
+          "wine": "runner/ge-proton11-1/files/bin/wine",
+          "wineserver": "runner/ge-proton11-1/files/bin/wineserver"
+        },
+        "prefix_operations": [
+          {
+            "path": "prefix/dosdevices",
+            "type": "mkdir"
+          },
+          {
+            "path": "prefix/dosdevices/c:",
+            "target": "../drive_c",
+            "type": "symlink"
+          }
+        ],
+        "protected_files": [
+          {
+            "digest": "sha256:a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+            "path": "prefix/drive_c/Games/DARK_SOULS_REMASTERED/DarkSoulsRemastered.exe",
+            "size": 50286344
+          },
+          {
+            "digest": "sha256:cf61e505e63852b24aefb9d9d0712bc1ae45921c7c3a0c01abb1dc0c95c8ca01",
+            "path": "prefix/drive_c/Games/DARK_SOULS_REMASTERED/steam_api64.dll",
+            "size": 6173184
+          },
+          {
+            "digest": "sha256:a0a5ac6dcd3d9255bb9c71bae3a71b6bf90c56f4fce46ff0d65533d7ef89b8d8",
+            "path": "prefix/drive_c/Games/DARK_SOULS_REMASTERED/steam_api64.dll.gbe_backup",
+            "size": 245536
+          }
+        ],
+        "schema": 0
+      },
+      "status": "verified"
     },
     {
       "adapter": "windows",

@@ -153,12 +153,13 @@
         "arguments": [],
         "entrypoint": "prefix/drive_c/Games/Sekiro/sekiro.exe.unpacked.exe",
         "environment": {
-          "WINEDEBUG": "-all"
+          "WINEDEBUG": "-all",
+          "WINEDLLOVERRIDES": "mscoree=d;winemenubuilder.exe=d"
         },
         "network": "host_default",
         "working_directory": "prefix/drive_c/Games/Sekiro"
       },
-      "notes": "Materialization, direct launch without Bottles, a second launch through the persistent launcher, normal process exit, changed-save detection, verified state export, and protected uninstall were accepted on the reference host. Network denial and cross-host portability remain untested.",
+      "notes": "Materialization, direct launch without Bottles, a second launch through the persistent launcher, normal process exit, changed-save detection, verified state export, and protected uninstall were accepted on the reference host. Network denial and cross-host portability remain untested. Wine Mono prompt suppression was accepted on 2026-07-21 with WINEDLLOVERRIDES=mscoree=d;winemenubuilder.exe=d.",
       "platform": "linux",
       "playable": {
         "backend": "wine",

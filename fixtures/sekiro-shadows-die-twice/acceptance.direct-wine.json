@@ -1,76 +1,81 @@
 {
-  "schema": 0,
   "capsule_id": "steam-814380-sekiro-shadows-die-twice-1.06",
-  "profile_id": "linux-direct-wine",
-  "tested_at": "2026-07-18",
-  "result": "passed_with_limitations",
-  "tests": [
-    {
-      "id": "runner-direct-execution",
-      "status": "passed",
-      "evidence": "Archived wine and wineserver reported Wine 11.0 successfully without invoking Bottles."
-    },
-    {
-      "id": "verified-materialization",
-      "status": "passed",
-      "evidence": "The Full Archive and runner were verified during extraction; 2429 and 8821 members were materialized."
-    },
-    {
-      "id": "runner-symlink-integrity",
-      "status": "passed",
-      "evidence": "All 1759 archived runner symlinks resolved within the restored runner."
-    },
-    {
-      "id": "prefix-completion",
-      "status": "passed",
-      "evidence": "dosdevices/c: was regenerated as a relative link to ../drive_c and z: was omitted."
-    },
-    {
-      "id": "accepted-state-restoration",
-      "status": "passed",
-      "evidence": "Two accepted persistent-state items were restored and verified."
-    },
-    {
-      "id": "first-launch-gameplay",
-      "status": "passed",
-      "evidence": "Version 1.06, existing-save loading, video, audio, controller input, and gameplay were observed."
-    },
-    {
-      "id": "persistent-launcher-second-run",
-      "status": "passed",
-      "evidence": "The generated launcher reused the materialization and completed a second functional session."
-    },
-    {
-      "id": "normal-process-exit",
-      "status": "passed",
-      "evidence": "The second session recorded game process rc 0 and wineserver wait rc 0."
-    },
-    {
-      "id": "changed-state-protection",
-      "status": "passed",
-      "evidence": "A changed save was detected; default removal was classified unsafe."
-    },
-    {
-      "id": "verified-state-export-and-uninstall",
-      "status": "passed",
-      "evidence": "Current save and identity were exported, independently verified, and the registered materialization was removed."
-    },
-    {
-      "id": "independent-network-denial",
-      "status": "not_tested",
-      "notes": "The direct-Wine acceptance did not independently prove denial of external networking."
-    },
-    {
-      "id": "cross-host-portability",
-      "status": "not_tested",
-      "notes": "The accepted materialization was not tested under another host, user, or filesystem."
-    }
-  ],
   "limitations": [
     "Independent external-network denial was not tested.",
     "Strict tracing of every ephemeral host write was not performed.",
     "Window-ready startup latency was not instrumented.",
     "Cross-host, cross-user, Windows-native, and long-term restoration remain untested.",
     "The public fixture redacts the private account-bound save path and contains no payload."
+  ],
+  "profile_id": "linux-direct-wine",
+  "result": "passed_with_limitations",
+  "schema": 0,
+  "tested_at": "2026-07-21",
+  "tests": [
+    {
+      "evidence": "Archived wine and wineserver reported Wine 11.0 successfully without invoking Bottles.",
+      "id": "runner-direct-execution",
+      "status": "passed"
+    },
+    {
+      "evidence": "The Full Archive and runner were verified during extraction; 2429 and 8821 members were materialized.",
+      "id": "verified-materialization",
+      "status": "passed"
+    },
+    {
+      "evidence": "All 1759 archived runner symlinks resolved within the restored runner.",
+      "id": "runner-symlink-integrity",
+      "status": "passed"
+    },
+    {
+      "evidence": "dosdevices/c: was regenerated as a relative link to ../drive_c and z: was omitted.",
+      "id": "prefix-completion",
+      "status": "passed"
+    },
+    {
+      "evidence": "Two accepted persistent-state items were restored and verified.",
+      "id": "accepted-state-restoration",
+      "status": "passed"
+    },
+    {
+      "evidence": "Version 1.06, existing-save loading, video, audio, controller input, and gameplay were observed.",
+      "id": "first-launch-gameplay",
+      "status": "passed"
+    },
+    {
+      "evidence": "The generated launcher reused the materialization and completed a second functional session.",
+      "id": "persistent-launcher-second-run",
+      "status": "passed"
+    },
+    {
+      "evidence": "The second session recorded game process rc 0 and wineserver wait rc 0.",
+      "id": "normal-process-exit",
+      "status": "passed"
+    },
+    {
+      "evidence": "A changed save was detected; default removal was classified unsafe.",
+      "id": "changed-state-protection",
+      "status": "passed"
+    },
+    {
+      "evidence": "Current save and identity were exported, independently verified, and the registered materialization was removed.",
+      "id": "verified-state-export-and-uninstall",
+      "status": "passed"
+    },
+    {
+      "id": "independent-network-denial",
+      "notes": "The direct-Wine acceptance did not independently prove denial of external networking.",
+      "status": "not_tested"
+    },
+    {
+      "id": "cross-host-portability",
+      "notes": "The accepted materialization was not tested under another host, user, or filesystem.",
+      "status": "not_tested"
+    },
+    {
+      "evidence": "Receipt play-61fce299f05dc289c4fdc2d79c2e2630 recorded a complete Direct-Wine session using WINEDLLOVERRIDES=mscoree=d;winemenubuilder.exe=d. No Wine Mono prompt appeared; the existing save loaded and launcher, game process, and Wineserver returned 0.",
+      "id": "wine-mono-prompt-suppression",
+      "status": "passed"
+    }
   ]
 }

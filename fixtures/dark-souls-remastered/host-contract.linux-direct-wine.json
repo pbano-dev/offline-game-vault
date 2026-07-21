@@ -1,32 +1,31 @@
 {
-  "schema": 0,
-  "contract_id": "linux-x86_64-direct-wine-dsr-unverified",
-  "platform": "linux",
   "architecture": [
     "x86_64"
   ],
-  "filesystem": {
-    "case_sensitive": "required",
-    "symlinks": "required",
-    "executable_bit": "required",
-    "colon_in_names": "preferred"
-  },
   "capabilities": {
+    "audio": {
+      "level": "required"
+    },
     "flatpak": {
       "level": "not_required",
       "reason": "This recovery profile is intended to run without Bottles or Flatpak."
     },
-    "user_namespaces": {
-      "level": "unknown",
-      "reason": "The direct Wine route has not been tested."
-    },
     "network_namespaces": {
-      "level": "preferred",
-      "reason": "Network isolation is required by policy, but the exact direct-Wine mechanism is not yet validated."
+      "level": "unknown",
+      "reason": "The generic OGV launcher declares host_default; strict network and device containment was validated separately."
     },
     "ntsync": {
       "level": "unknown",
-      "reason": "The archived bottle used ntsync; direct runner behavior is not yet tested."
+      "reason": "The functional receipt does not independently persist the sync backend; the exact runner remains preserved."
+    },
+    "python": {
+      "level": "required",
+      "minimum_version": "3.11",
+      "reason": "The generated OGV portable runtime is Python standard-library code."
+    },
+    "user_namespaces": {
+      "level": "not_required",
+      "reason": "The accepted functional Direct-Wine route did not use a user namespace."
     },
     "vulkan": {
       "level": "required",
@@ -37,13 +36,19 @@
     },
     "x11": {
       "level": "unknown"
-    },
-    "audio": {
-      "level": "required"
     }
   },
-  "graphics": {
-    "tested_backend": "unknown"
+  "contract_id": "linux-x86_64-direct-wine-dsr-verified",
+  "filesystem": {
+    "case_sensitive": "required",
+    "colon_in_names": "required",
+    "executable_bit": "required",
+    "symlinks": "required"
   },
-  "notes": "Unverified recovery contract. The archive did not visibly contain dosdevices/, so direct use as a standard Wine prefix remains unproven."
+  "graphics": {
+    "tested_backend": "vulkan"
+  },
+  "notes": "Verified Direct-Wine recovery contract. Evidence is retained in 04_RECEIPTS/steam-570940-dark-souls-remastered-1.03.1/operations/set-dsr-playable-20260720T125946Z-3e66a15a/receipt.json. The accepted route covers direct launch, clean restoration, relocation, existing-save loading, video, audio, normal close, and separately validated strict containment. Controller support and cross-host portability remain limitations.",
+  "platform": "linux",
+  "schema": 0
 }
