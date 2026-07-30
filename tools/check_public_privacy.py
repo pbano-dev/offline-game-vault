@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import argparse, os, re, subprocess, sys
+from collections.abc import Iterable
 from pathlib import Path
 
 PATTERNS = {
@@ -41,30 +42,49 @@ def tracked(root: Path) -> list[Path]:
     ).stdout
     return [root / p.decode() for p in data.split(b"\0") if p]
 
-def scan(root: Path) -> list[str]:
+def scan_paths(
+    root: Path,
+    paths: Iterable[Path],
+) -> list[str]:
     errors = []
-    for path in tracked(root):
+
+    for path in paths:
         rel = path.relative_to(root).as_posix()
+
         if path.is_symlink():
             target = os.readlink(path)
+
             if os.path.isabs(target):
                 errors.append(f"{rel}: absolute symlink target")
+
             for label, pattern in PATTERNS.items():
                 if pattern.search(target):
                     errors.append(f"{rel}: {label} in symlink target")
+
             continue
+
         if not path.is_file() or path.suffix.lower() not in TEXT:
             continue
+
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             errors.append(f"{rel}: tracked text is not UTF-8")
             continue
+
         for label, pattern in PATTERNS.items():
             match = pattern.search(text)
+
             if match:
-                errors.append(f"{rel}: possible {label}: {match.group(0)!r}")
+                errors.append(
+                    f"{rel}: possible {label}: {match.group(0)!r}"
+                )
+
     return errors
+
+
+def scan(root: Path) -> list[str]:
+    return scan_paths(root, tracked(root))
 
 def main() -> int:
     parser = argparse.ArgumentParser()

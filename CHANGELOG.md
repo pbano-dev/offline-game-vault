@@ -2,6 +2,20 @@
 
 All notable project changes are documented here.
 
+## 0.10.2 — 2026-07-31
+
+### Fixed
+
+- Rewrote test manifest construction to remain valid under Python 3.11.
+- Decoupled privacy-scanner unit tests from the external `git` executable.
+- Added a matrix-version compile gate before the unit-test step.
+
+### Validation
+
+- The complete suite was executed in the local Python 3.11 container used to
+  reproduce the failed CI job.
+- Repository validation, public privacy scanning, and filesystem hygiene passed.
+
 ## 0.10.1 — 2026-07-30
 
 ### Added

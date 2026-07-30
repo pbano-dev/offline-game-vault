@@ -142,21 +142,24 @@ class UmuAdapterTests(unittest.TestCase):
 
         manifests = {
             "game.sha256": (
-                f"{sha256_bytes(b'game\n')}  payload/game/game.bin\n"
+                sha256_bytes(b"game\n")
+                + "  payload/game/game.bin\n"
             ),
             "prefix.sha256": (
-                f"{sha256_bytes(b'baseline\n')}  "
-                "payload/prefix/base.txt\n"
+                sha256_bytes(b"baseline\n")
+                + "  payload/prefix/base.txt\n"
             ),
             "umu.sha256": (
-                f"{sha256_bytes(b'umu\n')}  engine/tool.txt\n"
+                sha256_bytes(b"umu\n")
+                + "  engine/tool.txt\n"
             ),
             "config.sha256": (
-                f"{sha256_bytes(b'required=1\n')}  "
-                "payload/game/config.ini\n"
+                sha256_bytes(b"required=1\n")
+                + "  payload/game/config.ini\n"
             ),
             "save.sha256": (
-                f"{sha256_bytes(b'accepted')}  payload/prefix/save.bin\n"
+                sha256_bytes(b"accepted")
+                + "  payload/prefix/save.bin\n"
             ),
         }
         for name, content in manifests.items():

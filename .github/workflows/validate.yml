@@ -49,6 +49,9 @@ jobs:
       - name: Audit public paths and symlink targets
         run: python -B tools/check_public_privacy.py
 
+      - name: Compile Python sources for matrix version
+        run: python -B -m compileall -q src tests tools
+
       - name: Run unit tests without writing bytecode
         run: python -B -m unittest discover -s tests -v
 

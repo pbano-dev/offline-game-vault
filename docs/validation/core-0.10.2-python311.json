@@ -1,0 +1,36 @@
+{
+  "base_commit": "10c918641aa9425499c13a13ba4329b2dca53866",
+  "changes": [
+    "Python 3.11-compatible manifest construction.",
+    "Hermetic privacy scanner tests through scan_paths().",
+    "Per-matrix Python compile gate in GitHub Actions."
+  ],
+  "generated_at_utc": "2026-07-30T22:10:42+00:00",
+  "limitations": [
+    "The container validation installs pinned CI requirements from the network.",
+    "GitHub Actions remains the final validation of all four matrix jobs."
+  ],
+  "project": "offline-game-vault",
+  "root_causes": [
+    "Python 3.11 rejects backslashes inside f-string expressions.",
+    "The reproduction container did not include the external git executable used by privacy tests."
+  ],
+  "schema": 1,
+  "status": "validated-public-fix-ready-for-review",
+  "validation": {
+    "filesystem_hygiene": true,
+    "git_diff_check": true,
+    "host_unit_tests": {
+      "count": 134,
+      "passed": true
+    },
+    "public_privacy_scan": true,
+    "python311_container_unit_tests": {
+      "count": 134,
+      "image": "docker.io/library/python:3.11-slim",
+      "passed": true
+    },
+    "repository_metadata": true
+  },
+  "version": "0.10.2"
+}

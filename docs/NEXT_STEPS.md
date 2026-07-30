@@ -20,6 +20,14 @@ collection paths, object digests, save identities, operation IDs, and raw logs.
 
 Base commit: `41cb284d2a2ff92d2dca21241cb06f4a6614c520`.
 
+## Completed in 0.10.2
+
+- Restored Python 3.11 compatibility in the UMU test module.
+- Made privacy-scanner unit tests independent of a Git executable.
+- Added an explicit compile gate to every Python CI matrix job.
+
+Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
+
 ## Priority 2: move validated external workflows into the core
 
 Implement generic commands for:
