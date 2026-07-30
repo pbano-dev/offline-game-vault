@@ -34,16 +34,19 @@ SCHEMA_FILES = {
 
 PRIVATE_PATTERNS = {
     "absolute Unix home path": re.compile(
-        r"(?<![A-Za-z0-9_])/(?:home|Users)/[^/\s\"']+"
+        r"(?<![A-Za-z0-9_])/(?:home|var/home|Users)/[^/\s\"']+"
     ),
     "runtime UID path": re.compile(
         r"(?<![A-Za-z0-9_])/run/user/\d+(?:/|$)"
+    ),
+    "removable media user path": re.compile(
+        r"(?<![A-Za-z0-9_])/run/media/[^/\s\"\']+"
     ),
     "absolute Windows user path": re.compile(
         r"(?i)(?<![A-Za-z0-9_])[A-Z]:[\\/]+Users[\\/]+[^\\/\s\"']+"
     ),
     "file URI to a private home": re.compile(
-        r"(?i)file:///(?:home|Users)/[^/\s\"']+"
+        r"(?i)file:///(?:home|var/home|Users)/[^/\s\"']+"
     ),
 }
 
@@ -244,6 +247,13 @@ class RepositoryValidation:
 
         game_objects: list[dict[str, Any]] = []
         object_ids: set[str] = set()
+        direct_roles = {
+            "game-payload": "game_payload",
+            "runner": "runner",
+            "runtime": "runtime",
+            "documentation": "documentation",
+            "state-seed": "save",
+        }
 
         for index, item in enumerate(objects):
             if not isinstance(item, dict):
@@ -253,16 +263,35 @@ class RepositoryValidation:
                 object_ids.add(object_id)
             roles_value = item.get("roles", [])
             roles = set(roles_value) if isinstance(roles_value, list) else set()
+            kind = item.get("kind")
+            scope = item.get("scope")
+            shared = item.get("shared") is True
             context = (
                 f"{self.relative(capsule_path)} "
                 f"$.objects[{index}] ({object_id})"
             )
 
+            if scope == "shared" and not shared:
+                self.error(f"{context}: scope 'shared' requires shared=true")
+            if scope == "game-specific" and shared:
+                self.error(
+                    f"{context}: scope 'game-specific' requires shared=false"
+                )
+
             if "game_payload" in roles:
                 game_objects.append(item)
-                if item.get("shared") is True:
+                if shared:
                     self.error(
                         f"{context}: canonical game object must not be shared"
+                    )
+                if kind not in {None, "game-payload"}:
+                    self.error(
+                        f"{context}: game_payload requires kind 'game-payload'"
+                    )
+                if scope not in {None, "game-specific"}:
+                    self.error(
+                        f"{context}: canonical game object requires "
+                        "scope 'game-specific'"
                     )
                 if item.get("format") == "file":
                     self.error(
@@ -271,20 +300,33 @@ class RepositoryValidation:
                     )
                 continue
 
-            if item.get("shared") is not True:
+            if kind == "game-payload":
                 self.error(
-                    f"{context}: non-game first-class objects must be shared"
+                    f"{context}: kind 'game-payload' requires role "
+                    "'game_payload'"
                 )
-            if not roles or not roles.issubset({"runner", "runtime"}):
+            required_role = direct_roles.get(kind)
+            if required_role and required_role not in roles:
                 self.error(
-                    f"{context}: additional first-class objects may only "
-                    "carry runner/runtime roles; embedded originals and "
-                    "derived files belong in embedded_artifacts"
+                    f"{context}: kind {kind!r} requires role "
+                    f"{required_role!r}"
+                )
+            if kind == "backend" and not roles.intersection(
+                {"runner", "runtime", "tool"}
+            ):
+                self.error(
+                    f"{context}: kind 'backend' requires runner, runtime, "
+                    "or tool role"
+                )
+            if roles and roles.issubset({"original", "derived"}):
+                self.error(
+                    f"{context}: original/derived-only files belong in "
+                    "embedded_artifacts"
                 )
             if item.get("format") == "file":
                 self.error(
-                    f"{context}: shared runner/runtime object must not be a "
-                    "single embedded file"
+                    f"{context}: first-class dependency must be an archive "
+                    "or directory object"
                 )
 
         if len(game_objects) != 1:
@@ -299,7 +341,6 @@ class RepositoryValidation:
         embedded = capsule.get("embedded_artifacts", [])
         if not isinstance(embedded, list):
             return
-
         embedded_ids: set[str] = set()
         for index, item in enumerate(embedded):
             if not isinstance(item, dict):
@@ -319,8 +360,7 @@ class RepositoryValidation:
                 embedded_ids.add(artifact_id)
             if item.get("container_object") != game_id:
                 self.error(
-                    f"{context}: container_object must reference "
-                    f"{game_id!r}"
+                    f"{context}: container_object must reference {game_id!r}"
                 )
 
         for index, profile in enumerate(capsule.get("profiles", [])):

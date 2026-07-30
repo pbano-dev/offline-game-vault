@@ -79,6 +79,7 @@ class UmuVerificationResult:
     destination: str
     protected_file_count: int
     symlink_count: int
+    hardlink_group_count: int
     verified: bool
 
     def to_dict(self) -> dict[str, Any]:
@@ -1953,7 +1954,7 @@ def verify_umu_materialization(
         destination,
         symlink_manifests,
     )
-    _verify_hardlink_sets(
+    hardlink_group_count = _verify_hardlink_sets(
         destination,
         hardlink_manifests,
     )
@@ -1993,6 +1994,7 @@ def verify_umu_materialization(
         destination=str(destination),
         protected_file_count=protected_count,
         symlink_count=symlink_count,
+        hardlink_group_count=hardlink_group_count,
         verified=True,
     )
 

@@ -1,0 +1,24 @@
+{
+  "base_commit": "41cb284d2a2ff92d2dca21241cb06f4a6614c520",
+  "ci_actions": {
+    "actions/checkout@v7": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-python@v6": "ece7cb06caefa5fff74198d8649806c4678c61a1"
+  },
+  "generated_at_utc": "2026-07-30T21:41:11+00:00",
+  "limitations": [
+    "Functional acceptance remains game- and profile-specific.",
+    "Update suppression is not network isolation."
+  ],
+  "project": "offline-game-vault",
+  "schema": 1,
+  "status": "validated-public-hardening-ready-for-review",
+  "validation": {
+    "filesystem_hygiene": true,
+    "git_diff_check": true,
+    "public_privacy_scan": true,
+    "repository_metadata": true,
+    "unit_test_count": 134,
+    "unit_tests_passed": true
+  },
+  "version": "0.10.1"
+}

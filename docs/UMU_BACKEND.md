@@ -103,3 +103,7 @@ claiming isolation needs a separately enforced and tested containment method.
 The sanitized DSR reference in `docs/DSR_UMU_REFERENCE.md` records the generic
 problems and solutions discovered during a private acceptance test. It does not
 publish private collection evidence or transfer acceptance to another game.
+
+## Verification evidence
+
+`verify-umu` reports protected-file, symlink, and `hardlink_group_count` values. The topology counts are part of the verification evidence.

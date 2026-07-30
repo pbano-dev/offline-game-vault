@@ -2,6 +2,28 @@
 
 All notable project changes are documented here.
 
+## 0.10.1 — 2026-07-30
+
+### Added
+
+- Repository-wide privacy scanning for tracked text and symlink targets.
+- Taxonomy consistency tests and hardlink verification evidence.
+- CI coverage for Python 3.11 through 3.14.
+
+### Changed
+
+- First-class dependency validation accepts declared shared or game-specific
+  runners, runtimes, backends, tools, caches, documentation, state seeds, and
+  authorized host dependencies.
+- Optional `kind` and `scope` must not contradict `roles` and `shared`.
+- GitHub Actions use immutable commit references.
+- `UmuVerificationResult` exposes `hardlink_group_count`.
+
+### Security
+
+- Public validation detects private Unix, removable-media, runtime-UID, and
+  Windows user paths, plus absolute symlink targets.
+
 ## 0.10.0 — 2026-07-30
 
 ### Added

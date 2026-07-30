@@ -132,6 +132,17 @@ scope:
 
 Changing taxonomy does not move CAS content.
 
+## 5.1 Taxonomy authority and consistency
+
+Generation `0` retains `roles` and `shared` as operational compatibility
+fields. Optional `kind` and `scope` are human-facing metadata and must not
+contradict them. The validator permits shared and game-specific first-class
+dependencies, rejects contradictory scope/shared pairs, requires direct roles
+for runner/runtime/documentation kinds, and keeps original-only or
+derived-only files in `embedded_artifacts`.
+
+Classification never changes a CAS path.
+
 ## 6. Capsules and profiles
 
 A capsule describes the preserved work and may contain several independent
@@ -422,7 +433,7 @@ Unsupported future generations are rejected rather than guessed.
 
 ## 22. Implementation status
 
-Implemented in the `0.10.0` work tree:
+Implemented in the `0.10.1` work tree:
 
 - content-addressed ingestion and verification;
 - safe staged materialization;

@@ -10,13 +10,22 @@ collection paths, object digests, save identities, operation IDs, and raw logs.
 - GitHub Actions validated commit `6eba2839c10ee8fd1b905f2f6379bf6ffac6dad1`.
 - Tagging and a hosted release remain separate decisions.
 
+## Completed in 0.10.1
+
+- Aligned taxonomy and first-class dependency validation.
+- Added consistency checks for `kind`/`scope` and `roles`/`shared`.
+- Added repository-wide public privacy validation.
+- Added Python 3.11-3.14 CI coverage with immutable action references.
+- Exposed hardlink-group counts in UMU verification results.
+
+Base commit: `41cb284d2a2ff92d2dca21241cb06f4a6614c520`.
+
 ## Priority 2: move validated external workflows into the core
 
 Implement generic commands for:
 
 - catalog build and verification;
 - normalized comparison of declared volatile runtime paths;
-- hardlink counts in the public verification result;
 - detection of symlinks that escape the materialization;
 - authorized capture of external host dependencies;
 - relative-target rewriting and post-rewrite verification;
