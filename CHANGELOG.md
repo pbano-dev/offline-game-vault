@@ -26,6 +26,14 @@ All notable project changes are documented here.
 - Duplicate ADR numbering corrected by moving canonical object granularity to
   ADR 0012.
 
+### Fixed
+
+- Added the documented optional `object.kind` and `object.scope` fields to the
+  capsule schema.
+- Clarified that hardlinks are rejected by default and may be enabled only by
+  an explicit archive policy.
+- Updated the release checklist after the 0.10.0 commit and CI completion.
+
 ### Validated outside the stable CLI
 
 - A clean UMU restoration with exact Steam Linux Runtime topology.

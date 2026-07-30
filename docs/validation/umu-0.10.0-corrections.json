@@ -1,0 +1,37 @@
+{
+  "base_commit": "6eba2839c10ee8fd1b905f2f6379bf6ffac6dad1",
+  "corrections": [
+    "Added optional object.kind and object.scope schema fields.",
+    "Clarified opt-in hardlink archive policy.",
+    "Marked the 0.10.0 commit and CI work as completed."
+  ],
+  "generated_at_utc": "2026-07-30T20:22:15+00:00",
+  "limitations": [
+    "The taxonomy fields are optional metadata.",
+    "They do not alter CAS identity or physical object paths.",
+    "Functional acceptance remains profile-specific."
+  ],
+  "project": "offline-game-vault",
+  "schema": 1,
+  "source_sha256": {
+    "CHANGELOG.md": "2b345c524d78ac1b6e2fba898cd62f4d344ab1429cf94940d659de5ba50e0511",
+    "docs/NEXT_STEPS.md": "8f131410caf05a34b5d1619e9c2d88656967a0ffd210416df3b886fac381eeba",
+    "docs/UMU_BACKEND.md": "95cc3406573eea12018559ba8cd8e67c4b50f5fc36a93a323a2505e20337093b",
+    "schemas/capsule.schema.json": "9b3b104a081c35fffd252d949beaf95197c9c143fc1704e8641b0461cf72ef86",
+    "tests/test_object_taxonomy_schema.py": "52bf181f810d094b19241ebda49d892c06c4b9ff2462414c66f4e95ed3301cfc"
+  },
+  "status": "validated-public-correction-ready-for-review",
+  "validation": {
+    "filesystem_hygiene": true,
+    "git_diff_check": true,
+    "privacy_scan": true,
+    "repository_metadata": true,
+    "schema_and_fixture_validation": true,
+    "unit_tests": {
+      "command": "python3 -B -m unittest discover -s tests -v",
+      "count": 125,
+      "passed": true
+    }
+  },
+  "version": "0.10.0"
+}

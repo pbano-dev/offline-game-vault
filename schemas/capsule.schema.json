@@ -82,6 +82,22 @@
           "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
           "type": "string"
         },
+        "kind": {
+          "description": "Primary human-facing classification. It does not affect the content-addressed object path.",
+          "enum": [
+            "game-payload",
+            "runner",
+            "runtime",
+            "backend",
+            "tool",
+            "cache",
+            "host-dependency",
+            "documentation",
+            "state-seed",
+            "historical",
+            "other"
+          ]
+        },
         "license_note": {
           "type": "string"
         },
@@ -108,6 +124,14 @@
           "minItems": 1,
           "type": "array",
           "uniqueItems": true
+        },
+        "scope": {
+          "description": "Declared reuse scope. It is metadata and does not alter object identity.",
+          "enum": [
+            "shared",
+            "game-specific",
+            "historical"
+          ]
         },
         "shared": {
           "default": false,

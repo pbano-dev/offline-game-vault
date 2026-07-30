@@ -3,13 +3,12 @@
 This document is public project context. It deliberately excludes private
 collection paths, object digests, save identities, operation IDs, and raw logs.
 
-## Priority 1: consolidate the core release
+## Completed in 0.10.0
 
-- Review the complete staged diff after running the release-preparation script.
-- Commit the UMU adapter, schema, CLI, tests, documentation, and ADRs together
-  as version `0.10.0`.
-- Confirm CI passes from a fresh checkout.
-- Tagging and a hosted release are separate decisions.
+- The UMU adapter, schema, CLI, tests, documentation, and ADRs were committed
+  on `main`.
+- GitHub Actions validated commit `6eba2839c10ee8fd1b905f2f6379bf6ffac6dad1`.
+- Tagging and a hosted release remain separate decisions.
 
 ## Priority 2: move validated external workflows into the core
 

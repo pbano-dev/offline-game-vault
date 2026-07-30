@@ -39,9 +39,11 @@ adapter label.
 
 ## Archive support and boundaries
 
-The backend accepts `tar`, `tar.gz`, and `tar.zst`. Hardlinks and special files
-are rejected. Absolute symlinks are rejected unless the exact path and target
-are declared in `allowed_absolute_symlinks`.
+The backend accepts `tar`, `tar.gz`, and `tar.zst`. Hardlinks are rejected by
+default unless the exact layout mapping opts in through
+`archive_policy.allow_hardlinks=true`. Special files remain rejected. Absolute
+symlinks are rejected unless the exact path and target are declared in
+`allowed_absolute_symlinks`.
 
 A nested prefix archive is extracted only into the writable derivative. The
 sealed baseline is never executed in place.
