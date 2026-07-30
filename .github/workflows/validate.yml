@@ -49,8 +49,23 @@ jobs:
       - name: Audit public paths and symlink targets
         run: python -B tools/check_public_privacy.py
 
-      - name: Compile Python sources for matrix version
-        run: python -B -m compileall -q src tests tools
+      - name: Check Python syntax for matrix version
+        shell: bash
+        run: |
+          python - <<'PYTHON_SYNTAX'
+          from pathlib import Path
+
+          paths = sorted(
+              path
+              for root in ("src", "tests", "tools")
+              for path in Path(root).rglob("*.py")
+          )
+
+          for path in paths:
+              compile(path.read_bytes(), str(path), "exec")
+
+          print(f"PYTHON SYNTAX CHECK PASSED: {len(paths)} files")
+          PYTHON_SYNTAX
 
       - name: Run unit tests without writing bytecode
         run: python -B -m unittest discover -s tests -v

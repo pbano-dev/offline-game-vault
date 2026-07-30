@@ -8,13 +8,17 @@ All notable project changes are documented here.
 
 - Rewrote test manifest construction to remain valid under Python 3.11.
 - Decoupled privacy-scanner unit tests from the external `git` executable.
-- Added a matrix-version compile gate before the unit-test step.
+- Added a matrix-version syntax gate before the unit-test step; it compiles
+  every Python source in memory and does not create bytecode inside the
+  repository.
 
 ### Validation
 
 - The complete suite was executed in the local Python 3.11 container used to
   reproduce the failed CI job.
 - Repository validation, public privacy scanning, and filesystem hygiene passed.
+- The no-write CI sequence was reproduced under Python 3.11, 3.12, 3.13,
+  and 3.14 before preparing the corrective commit.
 
 ## 0.10.1 — 2026-07-30
 

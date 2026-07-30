@@ -1,0 +1,57 @@
+{
+  "base_commit": "5c04c3bc7301f2e12c2b55743ee90fd4130a62c7",
+  "change": "The matrix syntax gate now compiles every Python source in memory through compile() and writes no bytecode into the repository.",
+  "generated_at_utc": "2026-07-30T22:19:25+00:00",
+  "limitations": [
+    "Container validation uses the public python:<version>-slim images rather than GitHub-hosted runners.",
+    "The pushed GitHub Actions run remains the final validation of the hosted matrix."
+  ],
+  "project": "offline-game-vault",
+  "root_cause": "python -m compileall created __pycache__ and .pyc artifacts that the final filesystem-hygiene step correctly rejected in every matrix job.",
+  "schema": 1,
+  "source_sha256": {
+    ".github/workflows/validate.yml": "0872f2b85e69acf7348c54a6862a1fe807fbfd22b44b09d0ee47741eb8857d64",
+    "CHANGELOG.md": "00efc09a0534a5f09bf5711d8873c98401cd7dbb72d57b2bdebfa2edc99198c2",
+    "docs/NEXT_STEPS.md": "66c3e06b54ac415e209c47794236900be8e4f93ec751c73d273efc4658c3b295"
+  },
+  "status": "validated-public-ci-fix-ready-for-review",
+  "validation": {
+    "filesystem_hygiene": true,
+    "git_diff_check": true,
+    "host_unit_test_count": 134,
+    "matrix": {
+      "3.11": {
+        "filesystem_hygiene": true,
+        "image": "docker.io/library/python:3.11-slim",
+        "log_retained_privately": true,
+        "syntax_check": true,
+        "unit_test_count": 134
+      },
+      "3.12": {
+        "filesystem_hygiene": true,
+        "image": "docker.io/library/python:3.12-slim",
+        "log_retained_privately": true,
+        "syntax_check": true,
+        "unit_test_count": 134
+      },
+      "3.13": {
+        "filesystem_hygiene": true,
+        "image": "docker.io/library/python:3.13-slim",
+        "log_retained_privately": true,
+        "syntax_check": true,
+        "unit_test_count": 134
+      },
+      "3.14": {
+        "filesystem_hygiene": true,
+        "image": "docker.io/library/python:3.14-slim",
+        "log_retained_privately": true,
+        "syntax_check": true,
+        "unit_test_count": 134
+      }
+    },
+    "public_privacy_scan": true,
+    "repository_metadata": true,
+    "tracked_hygiene": true
+  },
+  "version": "0.10.2"
+}
