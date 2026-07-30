@@ -1,0 +1,45 @@
+{
+  "base_commit": "1ed3b9c63de32310f5ca0dbf845978b4030ac002",
+  "excluded_private_inputs": [
+    "UMU_BACKEND_PATCH_RECEIPT.json",
+    "UMU_OFFLINE_DEPENDENCIES_PATCH_RECEIPT.json"
+  ],
+  "generated_at_utc": "2026-07-30T11:02:13+00:00",
+  "limitations": [
+    "Catalog generation and transactional publication are validated architectural extensions, not stable core commands.",
+    "Functional acceptance remains specific to each game and exact profile.",
+    "Update suppression is not network isolation."
+  ],
+  "project": "offline-game-vault",
+  "schema": 1,
+  "source_sha256": {
+    "ARCHITECTURE.md": "2d227162a314f95c6218d0c67dd250e63755a123e98226902b185def6f898eaa",
+    "CHANGELOG.md": "7f70ec0d36f0585f2d1358d6f2f917cf3ff636a4f8a99e793c9ea82eb4a95ca6",
+    "README.md": "223a1290fdb4b66263c5fbeccd73670703991d2e9dea21edb33d8549611a0c11",
+    "docs/DSR_UMU_REFERENCE.md": "3c8c3668823002ea616a13e899ae1fe477500ae871cd0eb83f3fc4ce75763a94",
+    "docs/NEXT_STEPS.md": "6eb12feebf49612746136dfeaf64b6901992593e4578526951db25db6f23ac75",
+    "docs/UMU_BACKEND.md": "eda8f8fe3422b7702877772f3e4e469771927df6e34a0334e08ea35fd0828d62",
+    "docs/validation.md": "d361a72391e88a9542c656b321e9ae0d7c5c75e016ffb4cc1d65a74196a23a87",
+    "pyproject.toml": "2cdb01f1a6cb72fefb7df6d12a304c2d8837d6230fb5f612df3997e8d88aa5e4",
+    "schemas/capsule.schema.json": "36a88e6174fb31906c541c5328eecb0d12afb0685b9703d2ef01c0cb058be2c6",
+    "src/offline_game_vault/__init__.py": "144939e2739352869d986f4a1e3e22fdfc27b3fa9311869849fe6304ab2fbc33",
+    "src/offline_game_vault/cli.py": "19b21541bc278a80ba034b450e9007d5adb2c06b85a7e1ea34ff0c5313d85a89",
+    "src/offline_game_vault/umu_adapter.py": "4a50a576c242161d76e4813b571d8ff89bde416ef6c2a4ca3235b47d59cdfdca",
+    "tests/test_umu_adapter.py": "ea0a2fc49267f949457f5d9f415baab23e1e3f0e3b99cb1a2b13f5788aee896b",
+    "tests/test_umu_adapter_cli.py": "ed6893d31f8d21f587773ab77018be47f8b8af540d32cf69a80798b549f9aeca",
+    "tests/test_umu_offline_dependencies.py": "ba8604571a901206f88dfb480b7af82b61cf4f37fc80a54c13219125205e8760"
+  },
+  "status": "validated-public-worktree-ready-for-review",
+  "validation": {
+    "filesystem_hygiene": true,
+    "git_diff_check": true,
+    "privacy_scan": true,
+    "repository_metadata": true,
+    "unit_tests": {
+      "command": "python3 -B -m unittest discover -s tests -v",
+      "count": 121,
+      "passed": true
+    }
+  },
+  "version": "0.10.0"
+}

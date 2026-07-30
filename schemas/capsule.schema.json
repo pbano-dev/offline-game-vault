@@ -280,6 +280,25 @@
     },
     "profile": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "adapter": {
+                "const": "umu"
+              }
+            },
+            "required": [
+              "adapter"
+            ]
+          },
+          "then": {
+            "required": [
+              "umu"
+            ]
+          }
+        }
+      ],
       "properties": {
         "acceptance_report": {
           "$ref": "#/$defs/relativePath"
@@ -363,6 +382,9 @@
             "not_tested",
             "unavailable"
           ]
+        },
+        "umu": {
+          "$ref": "#/$defs/umuPlayable"
         }
       },
       "required": [
@@ -425,6 +447,381 @@
         "id",
         "path",
         "kind"
+      ],
+      "type": "object"
+    },
+    "umuPlayable": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_absolute_symlinks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "target": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "target"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "hardlink_manifests": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "root": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "source": {
+                "$ref": "#/$defs/relativePath"
+              }
+            },
+            "required": [
+              "source",
+              "root"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "launchers": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "destination": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "mode": {
+                "maximum": 511,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/$defs/relativePath"
+              }
+            },
+            "required": [
+              "source",
+              "destination",
+              "digest",
+              "mode"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "layout": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "archive_policy": {
+                "additionalProperties": false,
+                "properties": {
+                  "allow_absolute_symlinks": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "allow_hardlinks": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "destination": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "object": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "source": {
+                "$ref": "#/$defs/relativePath"
+              }
+            },
+            "required": [
+              "object",
+              "source",
+              "destination"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "mutable_paths": {
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "nested_archives": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "destination": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/relativePath"
+                  },
+                  {
+                    "const": "."
+                  }
+                ]
+              },
+              "digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "remove_after": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "path",
+              "digest"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "offline_environment": {
+          "additionalProperties": false,
+          "properties": {
+            "cache_entries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                    "type": "string"
+                  },
+                  "path": {
+                    "$ref": "#/$defs/relativePath"
+                  },
+                  "required_files": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "digest": {
+                          "$ref": "#/$defs/digest"
+                        },
+                        "path": {
+                          "$ref": "#/$defs/relativePath"
+                        },
+                        "size": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "digest",
+                        "size"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id",
+                  "path",
+                  "required_files"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "runtime": {
+              "additionalProperties": false,
+              "properties": {
+                "family": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "path": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "required_paths": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "$ref": "#/$defs/relativePath"
+                      },
+                      "type": {
+                        "enum": [
+                          "directory",
+                          "file"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "type"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "version": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "version",
+                "path",
+                "required_paths"
+              ],
+              "type": "object"
+            },
+            "runtime_update": {
+              "const": false
+            },
+            "xdg_cache_home": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "xdg_data_home": {
+              "$ref": "#/$defs/relativePath"
+            }
+          },
+          "required": [
+            "xdg_data_home",
+            "xdg_cache_home",
+            "runtime_update",
+            "runtime",
+            "cache_entries"
+          ],
+          "type": "object"
+        },
+        "paths": {
+          "additionalProperties": false,
+          "properties": {
+            "launcher": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "runtime_var": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "sanitizer": {
+              "$ref": "#/$defs/relativePath"
+            }
+          },
+          "required": [
+            "launcher",
+            "sanitizer",
+            "runtime_var"
+          ],
+          "type": "object"
+        },
+        "protected_manifests": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "when_save": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "schema": {
+          "const": 0
+        },
+        "state_archives": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "filename": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "id": {
+                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+                "type": "string"
+              },
+              "policy": {
+                "enum": [
+                  "always",
+                  "selectable"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "filename",
+              "digest",
+              "policy"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "symlink_manifests": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_unresolved": {
+                "default": false,
+                "type": "boolean"
+              },
+              "prefixes": {
+                "items": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "source": {
+                "$ref": "#/$defs/relativePath"
+              }
+            },
+            "required": [
+              "source",
+              "prefixes"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema",
+        "layout",
+        "launchers",
+        "protected_manifests",
+        "symlink_manifests",
+        "paths"
       ],
       "type": "object"
     }

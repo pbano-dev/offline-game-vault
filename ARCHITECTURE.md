@@ -1,25 +1,28 @@
-# Offline Game Vault — Architecture v0
+# Offline Game Vault — Architecture 0.10
 
-Status: **Draft**
+Status: **implemented generation-0 core with validated extensions**
 Schema generation: **0**
-Last updated: **2026-07-18**
+Last updated: **2026-07-30**
 
 ## 1. Purpose
 
-Offline Game Vault preserves, verifies, materializes, and runs personally owned Windows games without requiring future network access.
+Offline Game Vault preserves, verifies, materializes, and runs personally owned
+Windows games without requiring future downloads.
 
-The normal user experience is:
+The normal flow is:
 
 ```text
-select game
-→ verify
-→ resolve archived dependencies
+select capsule
+→ verify declared objects
+→ resolve exact archived dependencies
 → materialize outside the vault
-→ prepare mutable state
-→ launch
+→ restore declared persistent state
+→ launch under an explicit host contract
+→ retain verification and acceptance evidence
 ```
 
-The vault is an archive and source of truth. It is not the working installation.
+The immutable vault is an archive and source of truth. A materialization is a
+derived working installation.
 
 ## 2. Non-goals
 
@@ -28,143 +31,121 @@ The project is not:
 - a game distributor;
 - a replacement for Wine, Bottles, Proton, UMU, Flatpak, or Windows;
 - a universal package manager;
-- a promise that every future host can run every preserved profile;
-- a reason to overwrite original files or regenerate integrity baselines silently.
+- a promise that every future host can execute every preserved profile;
+- permission to overwrite originals or silently regenerate baselines;
+- evidence that one game's acceptance applies to another game.
 
 ## 3. Trust hierarchy
 
 When sources conflict, use this order:
 
 1. real archived object tree;
-2. cryptographic hashes and manifests;
-3. recorded command output and acceptance evidence;
-4. metadata shown by the game;
+2. recorded hashes, manifests, and command output;
+3. acceptance evidence and receipts;
+4. metadata and credits retained with the game;
 5. official upstream documentation;
 6. project documentation;
 7. secondary sources.
 
-## 4. Core boundaries
+Verification compares against an existing baseline. Regeneration defines a new
+baseline. They are never the same operation.
 
-### 4.1 Vault
+## 4. Operational collection layout
 
-Immutable, backed up, and optionally mounted read-only.
-
-Contains:
-
-```text
-vault/
-├── catalog/
-├── games/
-├── objects/
-├── engines/
-├── tools/
-├── schemas/
-├── bootstrap/
-└── manifests/
-```
-
-### 4.2 Local store
-
-A host-local cache of verified immutable objects copied from the vault.
-
-It may be deleted and rebuilt.
-
-### 4.3 Materialized profile
-
-A host-local runnable installation assembled from archived objects.
-
-It contains engine configuration, game payload, prefix or compatibility state, and launch metadata.
-
-### 4.4 Persistent state
-
-Mutable user data that must survive removal and rematerialization:
-
-- saves;
-- required identity;
-- user configuration explicitly marked persistent.
-
-### 4.5 Regenerable state
-
-Mutable data that may be deleted:
-
-- logs;
-- ordinary shader caches;
-- temporary files;
-- disposable working prefixes when a baseline exists.
-
-A file that merely looks like a cache is not regenerable until proven so. Media Converter/Foz data is one known counterexample.
-
-### 4.6 Canonical object granularity
-
-A capsule declares exactly one first-class **game object**. That object is the
-self-contained archival unit for the title and contains the preserved game
-payload together with originals, derived binaries, configuration, and any
-prefix baseline intentionally included in that archive.
-
-Runners and runtimes are separate first-class objects only when they are shared
-execution dependencies. A runner or runtime object is archived once and may be
-referenced by multiple capsules by exact digest.
-
-Files already contained inside the canonical game object are not additional
-vault objects. Their identity is recorded as embedded artifacts, protected
-files, provenance, or acceptance evidence. Original executables, prepared
-executables, original Steamworks DLLs, and local Steamworks reimplementations
-must not be duplicated as first-class objects when their exact bytes are
-already preserved inside the game object.
-
-For a collection with `N` games, adding a title normally adds one game object.
-It adds a runner or runtime object only when that exact shared execution object
-is not already present.
-
-## 5. Primary operations
-
-The future orchestrator exposes, conceptually:
+The current collection layout is:
 
 ```text
-verify
-plan
-materialize
-play
-remove
-repair
-export-portable
-import-saves
-export-saves
+<Vault>/
+├── 00_CATALOG/
+│   ├── GAMES/
+│   ├── SHARED/
+│   ├── BY_DIGEST/
+│   ├── UNREFERENCED/
+│   ├── CATALOG.json
+│   └── README.md
+├── 01_IMMUTABLE_VAULT/
+│   ├── objects/
+│   │   └── sha256/<2>/<2>/<digest>
+│   └── VAULT_INVENTORY.json
+├── 02_CAPSULES/
+│   └── <capsule-id>/
+├── 03_PERSISTENT_STATE/
+│   └── <capsule-id>/
+├── 04_RECEIPTS/
+│   └── <capsule-id>/
+├── INDEX.json
+├── COLLECTION_LAYOUT.json
+└── COLLECTION_SHA256.txt
 ```
 
-Every mutating operation must support a dry-run or equivalent plan.
+### 4.1 Authority
 
-## 6. Dependency resolution
+- `01_IMMUTABLE_VAULT/objects/sha256/` is the physical content-addressed store.
+- `02_CAPSULES/` is the declarative source for games and execution profiles.
+- `03_PERSISTENT_STATE/` contains private mutable state with its own lifecycle.
+- `04_RECEIPTS/` records operations and acceptance.
+- `00_CATALOG/` is a human-readable, regenerable view.
+- `INDEX.json`, inventory, layout, and collection manifest are control-plane
+  metadata.
 
-A game profile references exact objects by digest.
+The catalog never replaces a digest or capsule. Removing a catalog entry does
+not remove an object, and an object is never deleted merely because the current
+catalog marks it unreferenced.
 
-Preferred identity:
+## 5. Object identity and granularity
+
+Preferred identity is:
 
 ```text
 sha256:<64 lowercase hexadecimal characters>
 ```
 
-Human-readable names and versions are metadata. They never replace the digest.
+The physical CAS path depends only on the digest. Human-readable names,
+versions, type, and scope are metadata.
 
-The resolver must not silently:
+A capsule declares one first-class non-shared game object. Files already inside
+that archive remain embedded artifacts or protected files. Shared runners,
+runtimes, backends, caches, tools, and authorized host dependencies are separate
+objects only when independently materialized and reusable.
 
-- download missing objects;
-- select a newer runner;
-- use a system Wine because it has a similar name;
-- regenerate manifests;
-- replace a failed verified profile with an experimental one.
+Object taxonomy is descriptive:
 
-## 7. Execution profiles
+```text
+kind:
+  game-payload
+  runner
+  runtime
+  backend
+  tool
+  cache
+  host-dependency
+  documentation
+  state-seed
+  historical
+  other
 
-A capsule may declare multiple profiles, for example:
+scope:
+  shared
+  game-specific
+  historical
+```
 
-- Bottles on Linux;
-- direct Wine on Linux;
-- UMU/Proton on Linux;
-- native Windows;
-- historical VM.
+Changing taxonomy does not move CAS content.
 
-Each profile has its own status:
+## 6. Capsules and profiles
+
+A capsule describes the preserved work and may contain several independent
+execution profiles:
+
+```text
+Bottles on Linux
+direct Wine on Linux
+UMU/Proton on Linux
+native Windows
+historical virtual machine
+```
+
+Profile status is independent:
 
 ```text
 verified
@@ -174,265 +155,287 @@ not_tested
 unavailable
 ```
 
-Profiles are independent. Success of one profile does not validate another.
+A verified profile identifies an exact contract and exact object set.
+Modification of a protected object, runner, runtime, cache, sanitizer, or
+adapter invalidates the corresponding acceptance until retested.
 
-## 8. Adapters
+The original capsule and a derived playable profile are different records.
+Derived work must retain provenance and must not replace the preserved original
+silently.
 
-Host-specific details belong in adapters, not in game manifests.
+## 7. Persistent and regenerable state
 
-Initial adapter families:
+Persistent state includes:
 
-```text
-bottles
-wine
-umu
-windows
-```
+- saves;
+- identity required by those saves;
+- explicitly declared user configuration.
 
-Adapters are responsible for:
+It is private, mutable, and separate from immutable game objects.
 
-- capability detection;
-- dynamic path discovery;
-- dependency deployment;
-- profile preparation;
-- process launch;
-- isolation options;
-- cleanup and receipts.
+Regenerable state may include ordinary logs, temporary directories, or caches
+only after that behavior has been demonstrated. A cache-like name is not proof
+that data can be discarded.
 
-A manifest must not contain a private absolute host path.
+The state engine uses an explicit state root and relative item paths. It never
+guesses paths from a title, AppID, username, or adapter. Restore requires a
+verified source and a mandatory rollback snapshot.
 
-## 9. Host contract
+## 8. Materialization boundary
 
-A profile declares requirements, not a remembered machine description.
+Materialization:
 
-Examples:
+1. verifies every required object;
+2. extracts through the safe archive layer;
+3. applies only declared mappings and policies;
+4. restores accepted persistent state transactionally;
+5. verifies protected files and filesystem topology;
+6. publishes the destination atomically where the filesystem permits;
+7. emits a receipt.
 
-- CPU architecture;
-- POSIX filesystem semantics;
-- Flatpak availability or archived bootstrap route;
-- Vulkan capability;
-- user namespaces;
-- network namespace support;
-- display and audio backends.
+The immutable object store is not a daily writable installation.
 
-The host checker reports:
+A cross-filesystem operation must stage on the destination filesystem before an
+atomic rename. A failed publication must restore the prior control plane.
 
-```text
-compatible
-warning
-incompatible
-unknown
-```
+## 9. Adapter boundary
 
-Unknown is not compatible.
+Host-specific behavior belongs in adapters, not in game IDs or hard-coded
+paths.
 
-## 10. Materialization rules
-
-1. The vault is never modified.
-2. Archived objects are verified before use.
-3. Immutable objects are copied, reflinked, or linked only according to a recorded strategy.
-4. The golden baseline is never used as the daily writable profile.
-5. Persistent saves are separated logically, even when an older source package stored them inside a bottle.
-6. Every installation produces a receipt.
-7. Removal follows the receipt and preserves saves by default.
-
-## 11. Portable export
-
-A portable export is a self-contained subset of the vault for one or more selected games.
-
-It contains:
-
-- game-specific objects;
-- all required shared dependencies;
-- schemas and manifests;
-- bootstrap launchers;
-- documentation;
-- integrity metadata;
-- a portable profile declaration.
-
-Default behavior on the destination host:
+Implemented families include:
 
 ```text
-verify USB
-→ detect host
-→ materialize to host-local storage
-→ launch
+Bottles
+direct Wine
+UMU/Proton
 ```
 
-Direct execution from removable media is an optional profile, not the default.
+Adapters are responsible for capability checks, exact dependency deployment,
+launch planning, environment construction, cleanup, and receipts.
 
-A bootable USB image is a future profile and is not required by architecture v0.
+The capsule states requirements. It does not remember a private host layout.
 
-## 12. Integrity and provenance
+## 10. Direct-Wine backend
 
-SHA-256 proves identity against a recorded baseline. It does not prove legitimacy, safety, or future executability.
+The direct-Wine backend composes the generic verified materializer, state
+manager, protected-file verifier, and portable runtime.
 
-The project distinguishes:
+It uses explicit archive-root mappings, prefix operations, Wine executables,
+runtime directories, arguments, environment, and network policy.
+
+Generation `0` does not simulate unsupported network isolation. A claim that
+cannot be enforced is rejected.
+
+## 11. Bottles backend
+
+Bottles deployments are mutable derivatives. The preserved source is never
+registered or modified in place.
+
+Deployment verifies the copied tree, rewrites only declared identity fields,
+retains a receipt, and requires explicit stopped-process and state decisions
+before removal.
+
+A Bottles export does not imply that the exact runner is present. Runner
+preservation is a separate dependency decision.
+
+## 12. UMU/Proton backend in 0.10.0
+
+UMU profiles can declare:
+
+- exact game and prefix layout;
+- exact Proton runner;
+- exact Steam Linux Runtime family and version;
+- archived UMU and Python components when required;
+- offline download caches;
+- required runtime and cache files;
+- archive policy for absolute symlinks and hardlinks;
+- expected symlink topology;
+- expected hardlink topology;
+- protected files;
+- a sanitizer for declared regenerable state;
+- an offline environment.
+
+The adapter verifies objects before extraction, verifies layout and topology,
+sanitizes before final verification, and promotes only a verified staged tree.
+
+`UMU_RUNTIME_UPDATE=0` suppresses runtime updates. It is not network isolation.
+Network containment remains a separate explicit control.
+
+## 13. Symlinks, hardlinks, and volatile runtime state
+
+POSIX topology is part of the preserved contract when the runtime depends on
+it.
+
+- Absolute symlinks are rejected unless a layout policy explicitly permits
+  them and verification accounts for them.
+- Broken or escaping symlinks are rejected unless a narrowly scoped contract
+  explicitly permits a known archival form.
+- Hardlink groups are verified from a manifest, not inferred from file content.
+- A volatile runtime path may be normalized only by a declared sanitizer whose
+  behavior is covered by tests.
+
+A regenerated `tmp-*` token may be normalized to the archived canonical token
+only when content and topology remain equivalent. The sanitizer must not erase
+unknown runtime state.
+
+## 14. External host dependencies
+
+A materialization is not self-contained while a required symlink resolves to a
+host-installed file.
+
+The accepted process is:
 
 ```text
-verify     = compare against an existing baseline
-regenerate = define a new baseline
+detect external target
+→ classify and authorize dependency
+→ capture regular files into an immutable object
+→ verify digest, size, architecture, and archive round trip
+→ add the object to the profile
+→ rewrite targets as internal relative symlinks
+→ hide the original host paths during acceptance
 ```
 
-Regeneration must never occur automatically during verification or repair.
+This process is not a license to copy arbitrary proprietary host content.
+Redistribution rights remain separate from personal preservation.
 
-## 13. Privacy
+## 15. Human-readable catalog
 
-Never archive or commit by default:
+The CAS is optimized for identity, not file-browser legibility.
+
+`00_CATALOG` provides `.ogvref` JSON references grouped by game, digest, and
+primary function. References are small metadata files, not copies, hardlinks,
+or alternative authorities.
+
+The catalog generator has been validated against a real collection. Core CLI
+integration, schema validation for `.ogvref`, and idempotent `catalog verify`
+commands remain pending.
+
+## 16. Transactional publication
+
+Publication updates a control plane, not immutable object bytes.
+
+A complete transaction may update:
+
+- the canonical capsule tree;
+- profile-specific persistent-state registration;
+- acceptance and operation receipts;
+- `INDEX.json`;
+- immutable inventory;
+- collection layout;
+- collection manifest;
+- the regenerable catalog.
+
+Publication stages on the destination filesystem, preserves before-images,
+validates the result, and rolls back on failure.
+
+This workflow has been validated externally. It is not yet a stable core
+command family.
+
+## 17. Reproducibility and containment
+
+Reproducibility and containment are independent:
+
+```text
+reproducibility:
+  exact objects, versions, manifests, environment, and restoration
+
+containment:
+  network namespace, mount namespace, hidden host paths, and process policy
+```
+
+A reproducible package may still have network access. A network-isolated launch
+may still depend on unarchived host components. Acceptance records both
+dimensions separately.
+
+## 18. Acceptance
+
+A profile is not complete merely because its process starts.
+
+Per-game acceptance normally checks:
+
+- clean restoration;
+- menu or equivalent initial state;
+- preserved save loaded;
+- owned DLC loaded where applicable;
+- gameplay reached;
+- no blocking online requirement;
+- normal close;
+- post-run protected-file verification;
+- post-run symlink and hardlink verification;
+- privacy audit;
+- state behavior;
+- actual network isolation when claimed.
+
+Architecture and automated mechanics are reusable. Functional acceptance is
+specific to each game and exact profile.
+
+## 19. Privacy
+
+The public repository must not contain:
 
 - private absolute paths;
-- username or hostname;
-- UID/GID tied to the host;
-- raw Wine, Bottles, Proton, DXVK, or build logs;
+- usernames or hostnames;
+- host UID/GID or runtime-session paths;
+- UUIDs copied from the host;
+- raw Wine, Bottles, Proton, DXVK, UMU, or build logs;
 - credentials;
-- unrelated host mappings.
+- save-bound private identity;
+- commercial payloads or proprietary redistributables.
 
-Required identity data, such as a save-bound SteamID, must be explicitly declared as a documented exception.
+Public evidence must be minimized and sanitized. Required private identity
+belongs in private persistent state and a documented exception, never in a
+public fixture.
 
-Archives should normalize internal ownership metadata where safe.
+Text, configuration, registry-like data, and symlink targets are audited
+separately.
 
-## 14. Documentation retained per game
+## 20. Repository boundary
 
-Every preserved game retains:
-
-```text
-00_README.md
-FICHA_DEL_JUEGO.md
-CREDITOS.md
-PRESERVADO_POR.md
-```
-
-Automation is the normal interface. Documentation remains the recovery path, evidence record, and human-readable explanation.
-
-## 15. Repository boundary
-
-The Git repository contains:
+Git contains:
 
 - orchestrator source;
-- adapters;
 - schemas;
 - tests;
-- templates;
-- documentation;
+- documentation and ADRs;
 - sanitized fixtures;
-- the project log.
+- sanitized validation records.
 
-It does not contain:
+Git does not contain:
 
+- the binary CAS;
 - commercial game payloads;
-- private saves;
-- private identifiers;
+- saves or private identity;
 - large prefixes;
-- proprietary redistributables without redistribution permission;
-- the canonical binary object store.
+- proprietary dependencies without redistribution permission;
+- local patch receipts or raw laboratory logs.
 
-## 16. Versioning
+## 21. Versioning
 
-Schemas use explicit integer generations beginning at `0`.
+Project releases use semantic package versions. Schema generations are explicit
+integers beginning at `0`.
 
-Breaking semantic changes require a new generation or a documented migration.
+A package-version change may add compatible generation-0 fields. A breaking
+semantic change requires a new schema generation or a documented migration.
 
-The orchestrator must reject unsupported future schema generations instead of guessing.
+Unsupported future generations are rejected rather than guessed.
 
-## 17. Implemented persistent-state transaction
+## 22. Implementation status
 
-The `0.7.0` state engine resolves capsule paths only below an explicit
-state root:
+Implemented in the `0.10.0` work tree:
 
-```text
-private capsule
-→ audit state declaration
-→ capture private backup
-→ verify payload and receipt
-→ snapshot current live state
-→ restore verified backup
-→ verify live result
-→ retain restore receipt
-```
+- content-addressed ingestion and verification;
+- safe staged materialization;
+- deterministic inventory;
+- generic persistent-state transactions;
+- Bottles deployment;
+- direct-Wine playable materialization;
+- UMU materialization with offline dependencies;
+- archive, symlink, hardlink, protected-file, and environment verification.
 
-The backup is not a materialization and is not an immutable game object. It is
-a private mutable-state artifact with its own receipt and lifecycle.
+Validated architecture pending core command integration:
 
-Implemented commands:
-
-```text
-ogv audit-capsule
-ogv preserve-state
-ogv verify-state-backup
-ogv restore-state
-```
-
-A restore never starts without a verified source backup and a mandatory
-pre-restore snapshot. Touched items are rolled back from that snapshot if the
-transaction fails.
-
-Generation `0` deliberately rejects state symlinks, special files, and
-multiply linked regular files. Supporting those semantics later requires an
-explicit schema and adapter policy.
-
-## 18. Playable materialization in 0.9.0
-
-Version `0.9.0` adds a capsule-driven direct-Wine path without replacing the
-existing generic materializer.
-
-The flow is:
-
-```text
-private operational capsule
-→ verify profile objects
-→ safe generic materialization
-→ map declared archive roots into prefix and runner
-→ complete only declared prefix infrastructure
-→ restore verified accepted state transactionally
-→ verify protected files
-→ publish atomically
-→ generate persistent play and uninstall launchers
-```
-
-The playable contract belongs to the execution profile. It declares:
-
-- object-to-layout mappings;
-- final prefix and runner roots;
-- exact Wine and Wineserver executables;
-- prefix completion operations;
-- protected files and expected identities;
-- launcher names;
-- runtime directories;
-- launch arguments, environment, and network policy.
-
-The engine never guesses archive roots, runner names, save paths, or protected
-file identities.
-
-### 18.1 Portable runtime
-
-Each published direct-Wine materialization contains a copy of the standard
-library-only portable runtime. The generated launchers therefore do not require
-Bottles or an installed OGV package.
-
-The runtime:
-
-- resolves every path relative to its own root;
-- verifies protected files before play or removal;
-- redirects `HOME`, temporary paths, XDG data, and `WINEPREFIX` under the
-  materialization;
-- invokes only the archived Wine and Wineserver;
-- writes a play receipt with preparation and process timings;
-- compares current state with the accepted baseline;
-- aborts removal by default when state changed;
-- exports and verifies state before removal when requested.
-
-Python 3 remains a host prerequisite for this generation. A portable Python
-object may become a future backend dependency.
-
-### 18.2 Explicit limitations
-
-Generation `0` of the direct-Wine backend does not implement network
-isolation. A profile declaring `network: isolated` is rejected rather than
-silently launched without isolation.
-
-The play receipt measures preparation, process duration, and Wineserver wait.
-It does not claim to measure the time at which a game window or menu becomes
-ready.
-
-Display, audio, and session sockets supplied by the host remain separate from
-persistent destination writes.
+- catalog build and verification;
+- external-dependency capture workflow;
+- end-to-end transactional profile publication;
+- GUI job orchestration.

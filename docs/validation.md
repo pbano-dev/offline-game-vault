@@ -97,3 +97,25 @@ Repository validation also enforces:
 - every embedded artifact names the canonical game object that contains it;
 - profile dependencies include the canonical game object;
 - embedded artifact IDs do not collide with first-class object IDs.
+
+## UMU/Proton validation in 0.10.0
+
+The UMU suite additionally verifies:
+
+- schema validation of UMU layout and dependency contracts;
+- exact object-to-layout mapping;
+- archive policy for absolute symlinks and hardlinks;
+- required Steam Linux Runtime files;
+- offline cache files by path, digest, and size;
+- symlink manifests and unresolved-target policy;
+- hardlink-group manifests;
+- protected files;
+- controlled XDG data and cache roots;
+- `UMU_RUNTIME_UPDATE=0`;
+- sanitizer execution before final topology verification;
+- atomic promotion of a verified staged materialization;
+- CLI result and failure behavior;
+- no game-specific constants in the adapter.
+
+The test suite uses synthetic objects. Commercial game data, private state, and
+proprietary runtime files are not present in Git.

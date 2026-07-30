@@ -46,6 +46,17 @@ from .playable import (
     run_playable_profile,
     verify_playable_profile,
 )
+from .umu_adapter import (
+    UmuAdapterError,
+    UmuMaterializationResult,
+    UmuRemovalResult,
+    UmuRunResult,
+    UmuVerificationResult,
+    materialize_umu_profile,
+    remove_umu_materialization,
+    run_umu_materialization,
+    verify_umu_materialization,
+)
 from .profile_store import (
     ProfileIngestResult,
     ProfileStoreError,
@@ -690,6 +701,169 @@ def _command_remove_playable(args: argparse.Namespace) -> int:
             + ("yes" if result.discard_state_authorized else "no")
         )
         print(f"Removed:                  {'yes' if result.removed else 'NO'}")
+    return 0 if result.removed else 1
+
+
+
+def _print_umu_materialization(
+    result: UmuMaterializationResult,
+) -> None:
+    print(f"Capsule:       {result.capsule_id}")
+    print(f"Profile:       {result.profile_id}")
+    print(f"Backend:       {result.backend}")
+    print(f"Destination:   {result.destination}")
+    print(f"Objects:       {result.object_count}")
+    print(f"Selected save: {result.selected_save or '(none)'}")
+    print(f"Complete:      {'yes' if result.complete else 'NO'}")
+    print(f"Receipt:       {result.receipt_id}")
+
+
+def _print_umu_verification(
+    result: UmuVerificationResult,
+) -> None:
+    print(f"Capsule:          {result.capsule_id}")
+    print(f"Profile:          {result.profile_id}")
+    print(f"Backend:          {result.backend}")
+    print(f"Destination:      {result.destination}")
+    print(f"Protected files:  {result.protected_file_count}")
+    print(f"Symlinks:         {result.symlink_count}")
+    print(f"Verified:         {'yes' if result.verified else 'NO'}")
+
+
+def _print_umu_run(result: UmuRunResult) -> None:
+    print(f"Capsule:              {result.capsule_id}")
+    print(f"Profile:              {result.profile_id}")
+    print(f"Backend:              {result.backend}")
+    print(f"Destination:          {result.destination}")
+    print(f"Process rc:           {result.process_rc}")
+    print(f"Duration ms:          {result.duration_ms}")
+    print(f"Sanitizer rc:         {result.sanitizer_rc}")
+    print(
+        "Verified after run:   "
+        + ("yes" if result.verified_after_run else "NO")
+    )
+    print(f"Complete:             {'yes' if result.complete else 'NO'}")
+
+
+def _command_materialize_umu(args: argparse.Namespace) -> int:
+    result = materialize_umu_profile(
+        capsule_path=args.capsule,
+        profile_id=args.profile,
+        vault_root=args.vault_root,
+        destination=args.destination,
+        state_root=args.state_root,
+        save_id=args.save,
+    )
+    run_result = None
+    if args.play:
+        run_result = run_umu_materialization(
+            destination=args.destination,
+        )
+
+    if args.json:
+        document: dict[str, object] = {
+            "materialization": result.to_dict(),
+        }
+        if run_result is not None:
+            document["run"] = run_result.to_dict()
+        print(
+            json.dumps(
+                document,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_umu_materialization(result)
+        if run_result is not None:
+            print()
+            _print_umu_run(run_result)
+
+    if not result.complete:
+        return 1
+    if run_result is not None and not run_result.complete:
+        return (
+            run_result.process_rc
+            if run_result.process_rc != 0
+            else run_result.sanitizer_rc or 1
+        )
+    return 0
+
+
+def _command_verify_umu(args: argparse.Namespace) -> int:
+    result = verify_umu_materialization(
+        destination=args.destination,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_umu_verification(result)
+    return 0 if result.verified else 1
+
+
+def _command_run_umu(args: argparse.Namespace) -> int:
+    arguments = list(args.arguments)
+    if arguments and arguments[0] == "--":
+        arguments = arguments[1:]
+    result = run_umu_materialization(
+        destination=args.destination,
+        arguments=arguments,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        _print_umu_run(result)
+    if result.process_rc != 0:
+        return result.process_rc
+    if result.sanitizer_rc != 0:
+        return result.sanitizer_rc
+    return 0 if result.complete else 1
+
+
+def _command_remove_umu(args: argparse.Namespace) -> int:
+    result = remove_umu_materialization(
+        destination=args.destination,
+        confirm_state_preserved=args.confirm_state_preserved,
+    )
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"Capsule:          {result.capsule_id}")
+        print(f"Profile:          {result.profile_id}")
+        print(f"Backend:          {result.backend}")
+        print(f"Destination:      {result.destination}")
+        print(f"Selected save:    {result.selected_save or '(none)'}")
+        print(
+            "State confirmed:  "
+            + (
+                "yes"
+                if result.state_preservation_confirmed
+                else "no"
+            )
+        )
+        print(f"Removed:          {'yes' if result.removed else 'NO'}")
     return 0 if result.removed else 1
 
 
@@ -1615,6 +1789,123 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
 
+    materialize_umu_parser = commands.add_parser(
+        "materialize-umu",
+        help=(
+            "Build or reuse a verified modular UMU materialization."
+        ),
+    )
+    materialize_umu_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Path to capsule.json with an UMU contract.",
+    )
+    materialize_umu_parser.add_argument(
+        "--profile",
+        required=True,
+        help="UMU execution profile ID.",
+    )
+    materialize_umu_parser.add_argument(
+        "--vault-root",
+        type=Path,
+        required=True,
+        help="Root of the immutable content-addressed vault.",
+    )
+    materialize_umu_parser.add_argument(
+        "--state-root",
+        type=Path,
+        help=(
+            "Directory containing required and selectable state archives."
+        ),
+    )
+    materialize_umu_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="New writable materialization outside the vault.",
+    )
+    materialize_umu_parser.add_argument(
+        "--save",
+        help="Selectable save archive ID. Omit for a clean materialization.",
+    )
+    materialize_umu_parser.add_argument(
+        "--play",
+        action="store_true",
+        help="Run after successful materialization.",
+    )
+    materialize_umu_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    materialize_umu_parser.set_defaults(
+        handler=_command_materialize_umu
+    )
+
+    verify_umu_parser = commands.add_parser(
+        "verify-umu",
+        help="Verify a published modular UMU materialization.",
+    )
+    verify_umu_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="UMU materialization directory.",
+    )
+    verify_umu_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    verify_umu_parser.set_defaults(handler=_command_verify_umu)
+
+    run_umu_parser = commands.add_parser(
+        "run-umu",
+        help="Run and sanitize a verified UMU materialization.",
+    )
+    run_umu_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="UMU materialization directory.",
+    )
+    run_umu_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    run_umu_parser.add_argument(
+        "arguments",
+        nargs=argparse.REMAINDER,
+        help="Arguments passed to the capsule launcher after --.",
+    )
+    run_umu_parser.set_defaults(handler=_command_run_umu)
+
+    remove_umu_parser = commands.add_parser(
+        "remove-umu",
+        help="Remove a recognized writable UMU derivative.",
+    )
+    remove_umu_parser.add_argument(
+        "--destination",
+        type=Path,
+        required=True,
+        help="UMU materialization directory.",
+    )
+    remove_umu_parser.add_argument(
+        "--confirm-state-preserved",
+        action="store_true",
+        help=(
+            "Confirm that mutable state was preserved before removal."
+        ),
+    )
+    remove_umu_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    remove_umu_parser.set_defaults(handler=_command_remove_umu)
+
     deploy_bottles_parser = commands.add_parser(
         "deploy-bottles",
         help=(
@@ -1797,6 +2088,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         InventoryError,
         MaterializationError,
         PlayableError,
+        UmuAdapterError,
         BottlesAdapterError,
         StateError,
     ) as exc:
