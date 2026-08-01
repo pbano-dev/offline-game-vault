@@ -1,8 +1,8 @@
-# Offline Game Vault — Architecture 0.10
+# Offline Game Vault — Architecture 0.11
 
 Status: **implemented generation-0 core with validated extensions**
 Schema generation: **0**
-Last updated: **2026-07-30**
+Last updated: **2026-08-01**
 
 ## 1. Purpose
 
@@ -173,6 +173,23 @@ adapter invalidates the corresponding acceptance until retested.
 The original capsule and a derived playable profile are different records.
 Derived work must retain provenance and must not replace the preserved original
 silently.
+
+### 6.1 Status is evidence, not permission
+
+Profile status and acceptance receipts describe known evidence. They do not
+authorize materialization. A user may request an experimental Bottles,
+Direct-Wine, or UMU variant even when the source profile is `candidate`,
+`not_tested`, `unavailable`, or does not already declare the exact
+backend/runner pair.
+
+The core synthesizes a private operational profile, leaves the published
+capsule unchanged, and records `acceptance_inherited: false`. The selectable
+runner must be a verified immutable Vault object. No network download or
+system-runner fallback is permitted.
+
+An experimental operation may still fail for a material reason: a missing or
+corrupt object, unsafe topology, incompatible runner, absent preserved UMU
+backend, ambiguous source layout, or unsafe destination.
 
 ## 7. Persistent and regenerable state
 

@@ -47,7 +47,18 @@
         "verified",
         "candidate",
         "experimental",
-        "not_tested"
+        "not_tested",
+        "unavailable"
+      ]
+    },
+    "experimental_variant": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/experimentalVariant"
+        }
       ]
     },
     "backend": {
@@ -376,6 +387,44 @@
     "digest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "experimentalVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source_profile_id",
+        "backend",
+        "runner_id",
+        "acceptance_inherited"
+      ],
+      "properties": {
+        "kind": {
+          "const": "experimental"
+        },
+        "source_profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend": {
+          "enum": [
+            "bottles",
+            "direct-wine",
+            "umu"
+          ]
+        },
+        "runner_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_template": {
+          "type": "string",
+          "minLength": 1
+        },
+        "acceptance_inherited": {
+          "const": false
+        }
+      }
     },
     "relativePath": {
       "type": "string",

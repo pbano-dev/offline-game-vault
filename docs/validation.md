@@ -119,3 +119,22 @@ The UMU suite additionally verifies:
 
 The test suite uses synthetic objects. Commercial game data, private state, and
 proprietary runtime files are not present in Git.
+
+## Experimental-variant validation in 0.11.0
+
+The experimental suite additionally verifies:
+
+- profile status does not authorize or prohibit materialization;
+- an `unavailable` neutral source can produce an experimental Direct-Wine
+  variant;
+- Bottles, Direct-Wine, and UMU variants can be synthesized when the exact
+  backend profile is absent but another compatible neutral Linux source exists;
+- preserved runner discovery checks canonical path, size, and SHA-256;
+- Proton is classified for Bottles, Direct-Wine, and UMU;
+- Bottles installs runners only from immutable Vault archives;
+- a previously installed Bottles runner is reused only while its complete tree
+  still verifies;
+- a preserved UMU/Python/Steam Runtime backend can be combined with a separate
+  preserved Proton object;
+- generated backend receipts record `acceptance_inherited: false`;
+- no system runner or network download participates in the synthetic tests.

@@ -947,6 +947,7 @@ def deploy_bottles_profile(
             "adapter": "bottles-flatpak",
             "capsule_id": capsule_id,
             "profile_id": profile_id,
+            "experimental_variant": profile.get("variant"),
             "materialization_receipt_id": materialization_receipt_id,
             "source_object_id": object_id,
             "bottle_name": bottle_name,

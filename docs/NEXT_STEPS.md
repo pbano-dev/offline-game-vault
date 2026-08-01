@@ -1,4 +1,4 @@
-# Next steps after the UMU 0.10.0 integration
+# Next steps after the experimental-variant 0.11.0 integration
 
 This document is public project context. It deliberately excludes private
 collection paths, object digests, save identities, operation IDs, and raw logs.
@@ -27,6 +27,15 @@ Base commit: `41cb284d2a2ff92d2dca21241cb06f4a6614c520`.
 - Added an explicit non-writing syntax gate to every Python CI matrix job.
 
 Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
+
+## Completed in 0.11.0
+
+- Added user-requested experimental variants for Bottles, Direct-Wine, and
+  UMU/Proton.
+- Made acceptance and status descriptive rather than authorization gates.
+- Restricted runner selection to SHA-256-verified immutable Vault objects.
+- Added preserved Bottles runner installation and reuse verification.
+- Added preserved UMU backend-template composition.
 
 ## Priority 2: move validated external workflows into the core
 
@@ -75,7 +84,10 @@ The GUI should call core operations and display:
 - publication and catalog status.
 
 The GUI must not embed game-specific paths, hashes, runners, or dependency
-lists.
+lists. It should obtain preserved runners and UMU backend templates from the
+core, then call `materialize-experimental` for user-requested combinations.
+Recommendation and acceptance must remain visible without becoming a hard
+permission gate.
 
 ## Per-game workflow after DSR
 

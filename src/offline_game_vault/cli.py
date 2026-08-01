@@ -21,6 +21,14 @@ from .bottles_adapter import (
     run_bottles_deployment,
     verify_bottles_deployment,
 )
+from .experimental import (
+    ExperimentalVariantError,
+    list_umu_templates,
+    materialize_experimental_bottles,
+    materialize_experimental_umu,
+    materialize_experimental_wine,
+)
+from .preserved_runners import RunnerCatalogError, scan_runners
 from .inventory import (
     InventoryError,
     VaultInventory,
@@ -1228,6 +1236,140 @@ def _command_restore_state(args: argparse.Namespace) -> int:
     return 0 if result.complete else 1
 
 
+def _command_list_preserved_runners(args: argparse.Namespace) -> int:
+    runners, warnings = scan_runners(args.collection_root)
+    document = {
+        "schema": 0,
+        "runners": [item.to_dict() for item in runners],
+        "warnings": list(warnings),
+    }
+    if args.json:
+        print(
+            json.dumps(
+                document,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        for runner in runners:
+            backends = ", ".join(runner.compatible_backends)
+            print(
+                f"{runner.runner_id}: {runner.kind}, {runner.size} bytes, "
+                f"{backends}"
+            )
+        for warning in warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+    return 0
+
+
+def _command_list_umu_templates(args: argparse.Namespace) -> int:
+    templates = list_umu_templates(args.collection_root)
+    document = {
+        "schema": 0,
+        "templates": [
+            {
+                "template_id": item.template_id,
+                "capsule_id": item.capsule_id,
+                "profile_id": item.profile_id,
+                "composite_object_id": item.composite_object_id,
+                "runtime_var": item.runtime_var,
+            }
+            for item in templates
+        ],
+    }
+    if args.json:
+        print(
+            json.dumps(
+                document,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        for item in templates:
+            print(
+                f"{item.template_id}: object={item.composite_object_id}, "
+                f"runtime_var={item.runtime_var}"
+            )
+    return 0
+
+
+def _command_materialize_experimental(args: argparse.Namespace) -> int:
+    common = {
+        "collection_root": args.collection_root,
+        "capsule_path": args.capsule,
+        "runner_id": args.runner,
+        "source_profile_id": args.source_profile,
+        "play": args.play,
+    }
+    forwarded = tuple(args.arguments)
+    if forwarded and forwarded[0] == "--":
+        forwarded = forwarded[1:]
+
+    if args.backend == "direct-wine":
+        if args.destination is None:
+            raise ExperimentalVariantError(
+                "--destination is required for direct-wine."
+            )
+        result = materialize_experimental_wine(
+            **common,
+            destination=args.destination,
+            state_backup=args.state_backup,
+            arguments=forwarded,
+        )
+    elif args.backend == "umu":
+        if args.destination is None:
+            raise ExperimentalVariantError("--destination is required for UMU.")
+        result = materialize_experimental_umu(
+            **common,
+            destination=args.destination,
+            backend_template_id=args.umu_backend,
+            arguments=forwarded,
+        )
+    else:
+        if args.bottles_path is None or not args.bottle_name:
+            raise ExperimentalVariantError(
+                "--bottles-path and --bottle-name are required for Bottles."
+            )
+        if forwarded:
+            raise ExperimentalVariantError(
+                "Additional game arguments are not supported for Bottles."
+            )
+        result = materialize_experimental_bottles(
+            **common,
+            bottles_path=args.bottles_path,
+            bottle_name=args.bottle_name,
+        )
+
+    if args.json:
+        print(
+            json.dumps(
+                result.to_dict(),
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"Capsule:      {result.capsule_id}")
+        print(f"Backend:      {result.backend}")
+        print(f"Runner:       {result.runner_id}")
+        print(f"Profile:      {result.profile_id}")
+        print(f"Destination:  {result.destination}")
+        print(f"Materialized: {'yes' if result.materialized else 'NO'}")
+        print(f"Played:       {'yes' if result.played else 'no'}")
+        if result.play_complete is not None:
+            print(
+                "Play complete: "
+                + ("yes" if result.play_complete else "NO")
+            )
+        print("Acceptance inherited: no")
+    return 0 if result.play_complete is not False else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ogv",
@@ -2071,6 +2213,120 @@ def build_parser() -> argparse.ArgumentParser:
         handler=_command_remove_bottles
     )
 
+    list_runners_parser = commands.add_parser(
+        "list-preserved-runners",
+        help="List structurally usable runners preserved in the collection.",
+    )
+    list_runners_parser.add_argument(
+        "--collection-root",
+        type=Path,
+        required=True,
+        help="Offline Game Vault collection root.",
+    )
+    list_runners_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    list_runners_parser.set_defaults(handler=_command_list_preserved_runners)
+
+    list_umu_templates_parser = commands.add_parser(
+        "list-umu-templates",
+        help="List preserved UMU/Python/Steam Runtime backend templates.",
+    )
+    list_umu_templates_parser.add_argument(
+        "--collection-root",
+        type=Path,
+        required=True,
+        help="Offline Game Vault collection root.",
+    )
+    list_umu_templates_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    list_umu_templates_parser.set_defaults(handler=_command_list_umu_templates)
+
+    experimental_parser = commands.add_parser(
+        "materialize-experimental",
+        help=(
+            "Synthesize, materialize and optionally run a user-requested "
+            "variant using only preserved Vault objects."
+        ),
+    )
+    experimental_parser.add_argument(
+        "--collection-root",
+        type=Path,
+        required=True,
+        help="Offline Game Vault collection root.",
+    )
+    experimental_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Source capsule.json.",
+    )
+    experimental_parser.add_argument(
+        "--backend",
+        choices=("bottles", "direct-wine", "umu"),
+        required=True,
+        help="Requested backend. Acceptance status does not restrict selection.",
+    )
+    experimental_parser.add_argument(
+        "--runner",
+        required=True,
+        help="Preserved runner ID from list-preserved-runners.",
+    )
+    experimental_parser.add_argument(
+        "--source-profile",
+        help=(
+            "Optional source profile ID. Required only when more than one "
+            "compatible source layout exists."
+        ),
+    )
+    experimental_parser.add_argument(
+        "--destination",
+        type=Path,
+        help="New destination for Direct-Wine or UMU.",
+    )
+    experimental_parser.add_argument(
+        "--state-backup",
+        type=Path,
+        help="Verified state backup for Direct-Wine.",
+    )
+    experimental_parser.add_argument(
+        "--umu-backend",
+        help=(
+            "Preserved UMU backend template as CAPSULE_ID/PROFILE_ID. "
+            "May be omitted when exactly one exists."
+        ),
+    )
+    experimental_parser.add_argument(
+        "--bottles-path",
+        type=Path,
+        help="Effective managed Bottles directory.",
+    )
+    experimental_parser.add_argument(
+        "--bottle-name",
+        help="New Bottles derivative name.",
+    )
+    experimental_parser.add_argument(
+        "--play",
+        action="store_true",
+        help="Launch after materialization.",
+    )
+    experimental_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    experimental_parser.add_argument(
+        "arguments",
+        nargs=argparse.REMAINDER,
+        help="Additional Direct-Wine or UMU game arguments after --.",
+    )
+    experimental_parser.set_defaults(handler=_command_materialize_experimental)
+
     return parser
 
 
@@ -2091,6 +2347,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         UmuAdapterError,
         BottlesAdapterError,
         StateError,
+        ExperimentalVariantError,
+        RunnerCatalogError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2

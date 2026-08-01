@@ -226,8 +226,6 @@ def _profile_and_contract(
             "Direct-Wine playable materialization currently requires Linux."
         )
     status = profile.get("status")
-    if status == "unavailable":
-        raise PlayableError("The requested profile is unavailable.")
     if not isinstance(status, str):
         raise PlayableError("The requested profile has no valid status.")
 
@@ -989,6 +987,7 @@ def materialize_playable_profile(
             "capsule_id": capsule_id,
             "profile_id": profile_id,
             "profile_status": contract.profile_status,
+            "experimental_variant": profile.get("variant"),
             "backend": "wine",
             "created_at": _now(),
             "orchestrator_version": __version__,

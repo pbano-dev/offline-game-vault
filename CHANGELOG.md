@@ -2,6 +2,49 @@
 
 All notable project changes are documented here.
 
+## 0.11.0 — 2026-08-01
+
+### Added
+
+- User-requested experimental materialization for Bottles, Direct-Wine, and
+  UMU/Proton.
+- Discovery and SHA-256 verification of preserved shared runners.
+- Synthesized operational profiles that leave source capsules unchanged,
+  including backend profiles absent from the published capsule when another
+  compatible neutral Linux source exists.
+- Preserved UMU backend-template discovery.
+- Optional materialize-and-play execution in the experimental command family.
+- Experimental-variant provenance in backend receipts.
+- Vault-derived Bottles runner installation with full-tree reuse validation.
+
+### Changed
+
+- Profile status and acceptance evidence are descriptive rather than
+  authorization gates.
+- `unavailable`, `candidate`, and `not_tested` profiles may be used as source
+  evidence for a user-requested experimental variant.
+- Bottles runner selection no longer falls back to an unverified local
+  installation.
+- Project version advanced from `0.10.2` to `0.11.0`.
+
+### Security
+
+- Experimental variants use only immutable objects already preserved in the
+  Vault.
+- Runner objects are checked against their recorded size and SHA-256 before
+  selection.
+- Existing Bottles runner directories are rejected unless they were installed
+  from the same Vault object and their complete tree still verifies.
+- Archive, path, symlink, destination, and atomic-publication protections
+  remain mandatory.
+
+### Validation
+
+- Synthetic end-to-end materialization was exercised for Direct-Wine, Bottles,
+  and UMU.
+- Tests cover an `unavailable` source profile, runner-object tampering,
+  preserved Bottles runner reuse, UMU backend composition, and CLI parsing.
+
 ## 0.10.2 — 2026-07-31
 
 ### Fixed

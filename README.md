@@ -18,6 +18,7 @@ capsule-driven direct-Wine materialization
 Bottles managed mutable deployment and execution
 generic persistent-state backup, verification, restoration, and rollback
 UMU/Proton materialization with exact archived dependencies
+user-requested experimental variants from preserved Vault pieces
 capsule operational audit
 ```
 
@@ -40,6 +41,7 @@ Start with:
 - `CHANGELOG.md`
 - `docs/validation.md`
 - `docs/UMU_BACKEND.md`
+- `docs/EXPERIMENTAL_VARIANTS.md`
 - `docs/DSR_UMU_REFERENCE.md`
 - `docs/NEXT_STEPS.md`
 
@@ -61,3 +63,14 @@ artifacts or protected files, not duplicated first-class objects.
 
 Success of one execution profile does not validate another profile, and success
 of one game does not transfer functional acceptance to a different game.
+
+## Experimental variants
+
+Acceptance evidence is descriptive, not an authorization mechanism. A user may
+request a Bottles, Direct-Wine, or UMU variant with any technically compatible
+runner preserved in the Vault. The core synthesizes an operational profile,
+records `acceptance_inherited: false`, and leaves the source capsule unchanged.
+
+The experimental path never downloads components and never falls back to a
+system runner. Missing or corrupt objects, unsafe paths, incompatible runners,
+and absent preserved backend pieces remain blocking errors.
