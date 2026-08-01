@@ -33,7 +33,6 @@ class DerivedCapsule:
     serialized: bytes
     original_runner_id: str
     selected_runner_id: str
-    effective_status: str
     companion_files: tuple[OverlayFile, ...] = ()
 
 
@@ -430,8 +429,8 @@ def build_derived_capsule(
         selected_declaration = {
             "archive_path": runner.archive_path,
             "description": (
-                f"Runner selected by Offline Game Vault core {__version__}; "
-                "this combination does not inherit functional acceptance."
+                f"Runner selected by Offline Game Vault core {__version__} "
+                "for the requested composition."
             ),
             "digest": runner.digest,
             "format": runner.format,
@@ -549,12 +548,12 @@ def build_derived_capsule(
             "environment": launch.get("environment", {}),
             "network": direct_wine_network,
         })
-        derived_profile["status"] = "experimental"
+        derived_profile.pop("status", None)
         derived_profile.pop("acceptance_report", None)
         derived_profile["notes"] = (
-            f"Direct-Wine profile derived by Offline Game Vault core {__version__} "
-            f"from a neutral object and runner {runner.runner_id!r}. "
-            "It does not inherit functional acceptance."
+            f"Direct-Wine profile composed by Offline Game Vault core "
+            f"{__version__} from a neutral object and runner "
+            f"{runner.runner_id!r}."
         )
         original_runner = (
             sorted(old_runner_ids)[0] if old_runner_ids else "<unbound>"
@@ -565,7 +564,6 @@ def build_derived_capsule(
             serialized=_canonical_bytes(derived),
             original_runner_id=original_runner,
             selected_runner_id=runner.runner_id,
-            effective_status="experimental",
             companion_files=(normalized_contract,),
         )
 
@@ -621,7 +619,6 @@ def build_derived_capsule(
             serialized=_canonical_bytes(original),
             original_runner_id=current_id,
             selected_runner_id=runner.runner_id,
-            effective_status=str(profile.get("status", "unspecified")),
             companion_files=(),
         )
 
@@ -641,8 +638,8 @@ def build_derived_capsule(
     selected_declaration = {
         "archive_path": runner.archive_path,
         "description": (
-            f"Core-selected shared runner {runner.runner_id}; "
-            "the source profile acceptance does not transfer automatically."
+            f"Core-selected shared runner {runner.runner_id} "
+            "for the requested composition."
         ),
         "digest": runner.digest,
         "format": runner.format,
@@ -705,13 +702,12 @@ def build_derived_capsule(
     derived_mappings[0]["destination"] = destination
 
     derived_paths.update(expected_paths)
-    derived_profile["status"] = "experimental"
+    derived_profile.pop("status", None)
     derived_profile.pop("acceptance_report", None)
     derived_profile["notes"] = (
-        f"Profile temporarily derived by Offline Game Vault core {__version__} "
+        f"Profile composed by Offline Game Vault core {__version__} "
         f"from {profile_id!r}: original runner {current_id!r}, "
-        f"selected runner {runner.runner_id!r}. "
-        "This combination does not inherit functional acceptance from the source profile."
+        f"selected runner {runner.runner_id!r}."
     )
 
     host_contract = _read_host_contract(
@@ -725,6 +721,5 @@ def build_derived_capsule(
         serialized=_canonical_bytes(derived),
         original_runner_id=current_id,
         selected_runner_id=runner.runner_id,
-        effective_status="experimental",
         companion_files=(host_contract,),
     )

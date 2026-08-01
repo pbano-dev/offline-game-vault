@@ -413,9 +413,6 @@
         },
         "umu": {
           "$ref": "#/$defs/umuPlayable"
-        },
-        "variant": {
-          "$ref": "#/$defs/variant"
         }
       },
       "required": [
@@ -852,49 +849,6 @@
         "protected_manifests",
         "symlink_manifests",
         "paths"
-      ],
-      "type": "object"
-    },
-    "variant": {
-      "additionalProperties": false,
-      "properties": {
-        "acceptance_inherited": {
-          "const": false
-        },
-        "backend": {
-          "enum": [
-            "bottles",
-            "direct-wine",
-            "umu"
-          ]
-        },
-        "backend_template": {
-          "description": "Deprecated 0.11.0 provenance field retained for receipt compatibility.",
-          "minLength": 1,
-          "type": "string"
-        },
-        "kind": {
-          "const": "experimental"
-        },
-        "runner_id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "shared_runtime_id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "source_profile_id": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "source_profile_id",
-        "backend",
-        "runner_id",
-        "acceptance_inherited"
       ],
       "type": "object"
     }

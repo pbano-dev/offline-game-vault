@@ -2014,7 +2014,6 @@ def materialize_umu_profile(
             "receipt_id": receipt_id,
             "capsule_id": capsule_id,
             "profile_id": profile_id,
-            "experimental_variant": profile.get("variant"),
             "backend": "umu",
             "created_at": _now(),
             "orchestrator_version": __version__,

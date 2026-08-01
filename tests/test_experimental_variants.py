@@ -514,7 +514,6 @@ class ExperimentalVariantTests(unittest.TestCase):
         )
 
         self.assertTrue(result.materialized)
-        self.assertFalse(result.acceptance_inherited)
         self.assertEqual(result.backend, "direct-wine")
         for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
             path = destination / name
@@ -692,10 +691,7 @@ class ExperimentalVariantTests(unittest.TestCase):
                 / ".ogv-bottles-deployment.json"
             ).read_text(encoding="utf-8")
         )
-        self.assertEqual(
-            receipt["experimental_variant"]["source_profile_id"],
-            "linux-direct-wine",
-        )
+        self.assertNotIn("experimental_variant", receipt)
 
     def test_direct_wine_synthesizes_from_bottles_neutral_source(self) -> None:
         self.capsule["profiles"] = [
@@ -806,7 +802,6 @@ class ExperimentalVariantTests(unittest.TestCase):
         )
 
         self.assertTrue(result.materialized)
-        self.assertFalse(result.acceptance_inherited)
         for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
             path = destination / name
             self.assertTrue(path.is_file())
@@ -825,10 +820,7 @@ class ExperimentalVariantTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(
-            receipt["experimental_variant"]["backend"],
-            "umu",
-        )
+        self.assertNotIn("experimental_variant", receipt)
 
 
 if __name__ == "__main__":

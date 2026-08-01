@@ -28,7 +28,6 @@ class RunnerRecord:
     metadata_source: str
     proton_path: str | None = None
     kind: str = "wine"
-    acceptance_status: str = "not_tested"
 
     def supports(self, backend_id: str) -> bool:
         return backend_id in self.compatible_backends
@@ -600,7 +599,6 @@ def scan_runners(
                         if hint.get("proton_path")
                         else "wine"
                     ),
-                    acceptance_status="not_tested",
                 )
             )
             seen_ids.add(runner_id)

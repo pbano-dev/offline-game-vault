@@ -131,7 +131,7 @@ class ObjectTaxonomySchemaTests(unittest.TestCase):
         self.assertTrue(errors)
 
 
-    def test_experimental_variant_accepts_shared_runtime_id(self) -> None:
+    def test_legacy_variant_metadata_is_rejected(self) -> None:
         capsule = copy.deepcopy(capsule_fixture())
         capsule["profiles"][0]["variant"] = {
             "kind": "experimental",
@@ -141,19 +141,21 @@ class ObjectTaxonomySchemaTests(unittest.TestCase):
             "shared_runtime_id": "umu-runtime-example",
             "acceptance_inherited": False,
         }
-        self.assert_valid(capsule)
 
-    def test_experimental_variant_keeps_legacy_backend_template_compatible(self) -> None:
-        capsule = copy.deepcopy(capsule_fixture())
-        capsule["profiles"][0]["variant"] = {
-            "kind": "experimental",
-            "source_profile_id": "source-profile",
-            "backend": "umu",
-            "runner_id": "preserved-proton",
-            "backend_template": "legacy-profile-id",
-            "acceptance_inherited": False,
-        }
-        self.assert_valid(capsule)
+        errors = list(
+            self.validator.iter_errors(capsule)
+        )
+
+        self.assertTrue(errors)
+        self.assertTrue(
+            any(
+                "Additional properties are not allowed"
+                in error.message
+                and "variant" in error.message
+                for error in errors
+            ),
+            [error.message for error in errors],
+        )
 
 
 if __name__ == "__main__":
