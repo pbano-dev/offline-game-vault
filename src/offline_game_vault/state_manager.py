@@ -704,19 +704,6 @@ def audit_capsule(*, capsule_path: Path) -> CapsuleAuditResult:
                     f"{context}.adapter",
                     "Profile adapter is not supported.",
                 )
-            if profile.get("status") not in {
-                "verified",
-                "candidate",
-                "experimental",
-                "not_tested",
-                "unavailable",
-            }:
-                add(
-                    "error",
-                    "INVALID_PROFILE_STATUS",
-                    f"{context}.status",
-                    "Profile status is not supported.",
-                )
 
             launch = profile.get("launch")
             if not isinstance(launch, dict):
@@ -750,21 +737,9 @@ def audit_capsule(*, capsule_path: Path) -> CapsuleAuditResult:
                             str(exc),
                         )
 
-            if (
-                profile.get("status") == "verified"
-                and profile.get("acceptance_report") is None
-            ):
-                add(
-                    "error",
-                    "VERIFIED_PROFILE_WITHOUT_ACCEPTANCE",
-                    f"{context}.acceptance_report",
-                    "Verified profile requires acceptance evidence.",
-                )
 
-            for field in ("host_contract", "acceptance_report"):
+            for field in ("host_contract",):
                 value = profile.get(field)
-                if value is None and field == "acceptance_report":
-                    continue
                 field_context = f"{context}.{field}"
                 try:
                     relative = _safe_relative_path(

@@ -550,13 +550,8 @@ class ExperimentalVariantTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(
-            receipt["experimental_variant"]["kind"],
-            "experimental",
-        )
-        self.assertFalse(
-            receipt["experimental_variant"]["acceptance_inherited"]
-        )
+        self.assertNotIn("experimental_variant", receipt)
+        self.assertNotIn("profile_status", receipt)
 
     def test_bottles_installs_and_reuses_only_verified_vault_runner(self) -> None:
         bottles = self.root / "components/bottles"

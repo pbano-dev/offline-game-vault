@@ -325,7 +325,9 @@
       ],
       "properties": {
         "acceptance_report": {
-          "$ref": "#/$defs/relativePath"
+          "$ref": "#/$defs/relativePath",
+          "deprecated": true,
+          "description": "Legacy evidence reference accepted only during migration; ignored by the core."
         },
         "adapter": {
           "enum": [
@@ -405,7 +407,9 @@
             "experimental",
             "not_tested",
             "unavailable"
-          ]
+          ],
+          "deprecated": true,
+          "description": "Legacy metadata accepted only during migration; ignored by the core."
         },
         "umu": {
           "$ref": "#/$defs/umuPlayable"
@@ -418,7 +422,6 @@
         "id",
         "platform",
         "adapter",
-        "status",
         "dependencies",
         "host_contract",
         "launch"
