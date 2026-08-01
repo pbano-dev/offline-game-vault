@@ -196,22 +196,33 @@ def _required_paths(
         name: _path_under(root, paths.get(name), f"paths.{name}")
         for name in required_names
     }
+    verifier_value = paths.get("verifier")
+    if verifier_value is not None:
+        resolved["verifier"] = _path_under(
+            root, verifier_value, "paths.verifier"
+        )
     for name in ("prefix", "runner", "working_directory", "runtime"):
         path = resolved[name]
         if path.is_symlink() or not path.is_dir():
             raise PortableRuntimeError(f"paths.{name} is not a regular directory.")
-    for name in (
+    regular_files = [
         "wine",
         "wineserver",
         "entrypoint",
         "launcher",
         "uninstaller",
         "portable_runtime",
-    ):
+    ]
+    if "verifier" in resolved:
+        regular_files.append("verifier")
+    for name in regular_files:
         path = resolved[name]
         if path.is_symlink() or not path.is_file():
             raise PortableRuntimeError(f"paths.{name} is not a regular file.")
-    for name in ("wine", "wineserver", "launcher", "uninstaller"):
+    executable_files = ["wine", "wineserver", "launcher", "uninstaller"]
+    if "verifier" in resolved:
+        executable_files.append("verifier")
+    for name in executable_files:
         if not os.access(resolved[name], os.X_OK):
             raise PortableRuntimeError(f"paths.{name} is not executable.")
     return resolved

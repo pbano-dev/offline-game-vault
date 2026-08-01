@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import uuid
 
@@ -20,6 +21,17 @@ class BottlesAdapterCliTests(unittest.TestCase):
         self.fixture = self.root / "fixture"
         self.bottles.mkdir()
         self.fixture.mkdir()
+        self._discover_patch = patch(
+            "offline_game_vault.bottles_adapter.discover_bottles_path",
+            return_value=self.bottles.resolve(),
+        )
+        self._register_patch = patch(
+            "offline_game_vault.bottles_adapter.assert_bottle_registered"
+        )
+        self._discover_patch.start()
+        self._register_patch.start()
+        self.addCleanup(self._discover_patch.stop)
+        self.addCleanup(self._register_patch.stop)
 
         bottle = (
             self.materialization

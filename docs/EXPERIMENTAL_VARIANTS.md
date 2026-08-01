@@ -55,27 +55,22 @@ ogv materialize-experimental \
   --capsule <VAULT>/02_CAPSULES/<CAPSULE_ID>/capsule.json \
   --backend bottles \
   --runner <RUNNER_ID> \
-  --bottles-path <BOTTLES_MANAGED_PATH> \
   --bottle-name <NEW_BOTTLE_NAME>
 ```
 
+The core discovers the effective managed directory through
+`bottles-cli info bottles-path`. The optional `--bottles-path` argument is only
+an assertion for automation; a different or arbitrary directory is rejected.
+
 The selected runner is installed from its immutable Vault archive. An existing
 local runner with the same name is rejected unless it was installed from the
-same preserved object and its complete tree still verifies.
+same preserved object and its complete tree still verifies. Heavy staging is
+created inside the managed Bottles directory and the final bottle must be
+enumerated by `bottles-cli` before success is reported.
 
 `--play` launches the resulting managed bottle after deployment.
 
 ## 4. UMU/Proton
-
-List preserved backend templates:
-
-```bash
-ogv list-umu-templates \
-  --collection-root <VAULT> \
-  --json
-```
-
-Then materialize:
 
 ```bash
 ogv materialize-experimental \
@@ -83,13 +78,38 @@ ogv materialize-experimental \
   --capsule <VAULT>/02_CAPSULES/<CAPSULE_ID>/capsule.json \
   --backend umu \
   --runner <PROTON_RUNNER_ID> \
-  --umu-backend <CAPSULE_ID>/<PROFILE_ID> \
   --destination <NEW_DESTINATION>
 ```
 
-The backend template supplies preserved UMU, portable Python, and Steam Linux
-Runtime components. The selected Proton is mapped separately from its preserved
-runner object.
+The core reads the preserved Proton runner's `toolmanifest.vdf` and resolves
+the exact Steam Linux Runtime required by `require_tool_appid`. A qualifying
+runtime object must be preserved in the Vault, marked `shared: true`, carry the
+`runtime` role, match that family, and pass a complete archive inspection
+before it is selectable. Incomplete runtime objects are ignored rather than
+being discovered after a game has been copied.
+
+The user does not select another game's capsule or profile as a backend.
+Diagnostic inventory is available with:
+
+```bash
+ogv list-shared-umu-runtimes \
+  --collection-root <VAULT> \
+  --json
+```
+
+The selected Proton remains a separate preserved runner object.
+
+## Destination-local staging
+
+All large working trees are created on the filesystem selected for the final
+derivative:
+
+- Bottles: below the selected managed Bottles directory;
+- Direct-Wine and UMU: below the selected destination parent.
+
+Hidden `.ogv-*` working directories are verified and then published
+atomically. They are removed after success or failure. `/tmp` is not used for
+large game copies.
 
 ## 5. Status and receipts
 
@@ -108,9 +128,29 @@ acceptance_inherited: false
 source_profile_id
 backend
 runner_id
-backend_template  # UMU only
+shared_runtime_id  # UMU only
 ```
 
 Materialization success means the declared pieces assembled and verified. It
 does not prove gameplay, saves, DLC, media, controller support, isolation, or
 normal shutdown.
+
+## Canonical operational interface
+
+Every published Linux materialization exposes the same root interface:
+
+```text
+JUGAR.sh
+VERIFICAR.sh
+DESINSTALAR.sh
+```
+
+The implementation behind those scripts is backend-specific and copied into
+the derivative. Receipts remain descriptive evidence; the scripts are the
+operational entry points used by the GUI.
+
+UMU variants additionally require a complete preserved `steamrtN` tree with
+`VERSIONS.txt`, `_v2-entry-point`, `pressure-vessel`, and exactly one matching
+`steamrtN_platform_*` directory. Launch is isolated from the network and
+runtime downloads are never used as repair.
+

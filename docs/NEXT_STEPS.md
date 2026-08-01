@@ -1,4 +1,4 @@
-# Next steps after the experimental-variant 0.11.0 integration
+# Next steps after the experimental-variant 0.11.3 integration
 
 This document is public project context. It deliberately excludes private
 collection paths, object digests, save identities, operation IDs, and raw logs.
@@ -35,7 +35,19 @@ Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
 - Made acceptance and status descriptive rather than authorization gates.
 - Restricted runner selection to SHA-256-verified immutable Vault objects.
 - Added preserved Bottles runner installation and reuse verification.
-- Added preserved UMU backend-template composition.
+- Added automatic composition from shared UMU runtime objects.
+
+
+## Completed in 0.11.1–0.11.3
+
+- Moved large staging trees beside their final destination.
+- Restored Bottles managed-path discovery through `bottles-cli` and made an
+  arbitrary deployment directory invalid.
+- Added canonical operational scripts to every Linux materialization.
+- Enforced network-isolated UMU launch with preserved dependencies only.
+- Resolved the exact Steam Linux Runtime from each Proton runner's archived
+  `toolmanifest.vdf`, including the steamrt3/sniper naming distinction.
+- Excluded incomplete and mismatched shared runtimes before materialization.
 
 ## Priority 2: move validated external workflows into the core
 
@@ -84,8 +96,9 @@ The GUI should call core operations and display:
 - publication and catalog status.
 
 The GUI must not embed game-specific paths, hashes, runners, or dependency
-lists. It should obtain preserved runners and UMU backend templates from the
-core, then call `materialize-experimental` for user-requested combinations.
+lists. It should obtain preserved runners from the core, while shared UMU
+runtimes are resolved internally by the core, then call
+`materialize-experimental` for user-requested combinations.
 Recommendation and acceptance must remain visible without becoming a hard
 permission gate.
 

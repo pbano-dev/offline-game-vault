@@ -25,12 +25,12 @@ class ExperimentalCliTests(unittest.TestCase):
 
         templates = parser.parse_args(
             [
-                "list-umu-templates",
+                "list-shared-umu-runtimes",
                 "--collection-root",
                 "vault",
             ]
         )
-        self.assertEqual(templates.command, "list-umu-templates")
+        self.assertEqual(templates.command, "list-shared-umu-runtimes")
 
         materialize = parser.parse_args(
             [

@@ -11,15 +11,24 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shlex
 import shutil
+import subprocess
+import tarfile
 import tempfile
 from typing import Any, Sequence
+import zipfile
 
 from . import __version__
-from .bottles_adapter import deploy_bottles_profile, run_bottles_deployment
+from .bottles_adapter import (
+    BottlesAdapterError,
+    deploy_bottles_profile,
+    require_bottles_managed_path,
+    run_bottles_deployment,
+)
 from .experimental_profile import (
     DerivedCapsule,
     RunnerOverrideError,
@@ -33,7 +42,13 @@ from .neutral_profiles import (
 from .playable import materialize_playable_profile, run_playable_profile
 from .preserved_runners import RunnerCatalogError, RunnerRecord, scan_runners
 from .runner_deployment import RunnerDeploymentError, ensure_bottles_runner
-from .umu_adapter import materialize_umu_profile, run_umu_materialization
+from .umu_adapter import (
+    UmuAdapterError,
+    _inspect_archive,
+    materialize_umu_profile,
+    run_umu_materialization,
+)
+from .verifier import VerifyError, resolve_capsule_object, verify_object
 
 
 class ExperimentalVariantError(RuntimeError):
@@ -41,17 +56,26 @@ class ExperimentalVariantError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class UmuBackendTemplate:
-    capsule_id: str
-    capsule_path: Path
-    profile_id: str
+class SharedUmuRuntime:
+    """Reusable UMU/Python/Steam Runtime partitions preserved in the Vault.
+
+    The source capsule is provenance only.  Selection and receipts identify the
+    reusable runtime by its content digest, never by another game's profile.
+    """
+
+    runtime_id: str
+    digest: str
     composite_object_id: str
     composite_object: dict[str, Any]
     runtime_var: str
-
-    @property
-    def template_id(self) -> str:
-        return f"{self.capsule_id}/{self.profile_id}"
+    runtime_family: str
+    platform_prefix: str
+    platform_directory: str
+    archive_policy: dict[str, Any] | None
+    allowed_absolute_symlinks: tuple[dict[str, Any], ...]
+    source_capsule_id: str
+    source_profile_id: str
+    source_capsule_path: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +101,309 @@ _BACKEND_PARTITIONS = (
     "engine/umu-portable",
     "engine/xdg-data",
 )
+
+
+# UMU 1.4.x resolves the container runtime from Proton's
+# toolmanifest.vdf `require_tool_appid`.  The platform directory uses the
+# runtime codename for steamrt2/steamrt3 and the family name for steamrt4.
+# Source: Open-Wine-Components/umu-launcher, umu_runtime.py RUNTIME_VERSIONS.
+_UMU_RUNTIME_BY_APPID: dict[str, tuple[str, str]] = {
+    "1391110": ("steamrt2", "soldier"),
+    "1628350": ("steamrt3", "sniper"),
+    "4183110": ("steamrt4", "steamrt4"),
+}
+_UMU_PLATFORM_PREFIX_BY_FAMILY: dict[str, str] = {
+    family: platform
+    for family, platform in _UMU_RUNTIME_BY_APPID.values()
+}
+_TOOLMANIFEST_LIMIT = 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class _UmuRuntimeRequirement:
+    appid: str
+    family: str
+    platform_prefix: str
+
+
+def _read_limited_stream(stream: Any, label: str) -> bytes:
+    payload = stream.read(_TOOLMANIFEST_LIMIT + 1)
+    if len(payload) > _TOOLMANIFEST_LIMIT:
+        raise ExperimentalVariantError(f"{label} is unexpectedly large.")
+    return payload
+
+
+def _read_runner_archive_member(
+    collection_root: Path,
+    runner: RunnerRecord,
+    relative: str,
+) -> bytes:
+    archive = (
+        collection_root
+        / "01_IMMUTABLE_VAULT"
+        / _safe_relative(runner.archive_path, "runner.archive_path")
+    )
+    target = (
+        PurePosixPath(runner.source_root)
+        / _safe_relative(relative, "runner member")
+    ).as_posix()
+
+    if runner.format == "zip":
+        try:
+            with zipfile.ZipFile(archive) as handle:
+                with handle.open(target) as stream:
+                    return _read_limited_stream(stream, target)
+        except (KeyError, OSError, zipfile.BadZipFile) as exc:
+            raise ExperimentalVariantError(
+                f"Preserved runner lacks readable {target}."
+            ) from exc
+
+    if runner.format in {"tar", "tar.gz"}:
+        try:
+            with tarfile.open(archive, mode="r:*") as handle:
+                member = handle.getmember(target)
+                if not member.isfile():
+                    raise ExperimentalVariantError(
+                        f"Preserved runner {target} is not a regular file."
+                    )
+                stream = handle.extractfile(member)
+                if stream is None:
+                    raise ExperimentalVariantError(
+                        f"Cannot read preserved runner {target}."
+                    )
+                with stream:
+                    return _read_limited_stream(stream, target)
+        except (KeyError, OSError, tarfile.TarError) as exc:
+            raise ExperimentalVariantError(
+                f"Preserved runner lacks readable {target}."
+            ) from exc
+
+    if runner.format != "tar.zst":
+        raise ExperimentalVariantError(
+            f"Unsupported preserved runner format: {runner.format}."
+        )
+    zstd = shutil.which("zstd")
+    if zstd is None:
+        raise ExperimentalVariantError(
+            "zstd is required to inspect the preserved Proton runner."
+        )
+
+    process = subprocess.Popen(
+        [zstd, "-dc", "--no-progress", str(archive)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert process.stdout is not None
+    assert process.stderr is not None
+    found: bytes | None = None
+    try:
+        with tarfile.open(fileobj=process.stdout, mode="r|") as handle:
+            for member in handle:
+                if member.name.rstrip("/") != target:
+                    continue
+                if not member.isfile():
+                    raise ExperimentalVariantError(
+                        f"Preserved runner {target} is not a regular file."
+                    )
+                stream = handle.extractfile(member)
+                if stream is None:
+                    raise ExperimentalVariantError(
+                        f"Cannot read preserved runner {target}."
+                    )
+                with stream:
+                    found = _read_limited_stream(stream, target)
+                break
+    except (OSError, tarfile.TarError) as exc:
+        raise ExperimentalVariantError(
+            f"Cannot inspect preserved runner {target}: {exc}"
+        ) from exc
+    finally:
+        if found is not None:
+            process.kill()
+        stderr = process.stderr.read().decode("utf-8", errors="replace")
+        returncode = process.wait()
+    if found is None:
+        if returncode != 0:
+            raise ExperimentalVariantError(
+                f"Cannot inspect preserved runner: {stderr.strip()}"
+            )
+        raise ExperimentalVariantError(
+            f"Preserved runner lacks readable {target}."
+        )
+    return found
+
+
+def _required_umu_runtime(
+    collection_root: Path,
+    runner: RunnerRecord,
+) -> _UmuRuntimeRequirement:
+    if runner.proton_path is None:
+        raise ExperimentalVariantError(
+            f"Runner {runner.runner_id!r} is not a Proton runner."
+        )
+    raw = _read_runner_archive_member(
+        collection_root,
+        runner,
+        "toolmanifest.vdf",
+    )
+    document = raw.decode("utf-8", errors="replace")
+    match = re.search(
+        r"(?im)[\"']?require_tool_appid[\"']?\s+[\"']?([0-9]+)[\"']?",
+        document,
+    )
+    if match is None:
+        raise ExperimentalVariantError(
+            f"Runner {runner.runner_id!r} does not declare "
+            "require_tool_appid in toolmanifest.vdf."
+        )
+    appid = match.group(1)
+    resolved = _UMU_RUNTIME_BY_APPID.get(appid)
+    if resolved is None:
+        raise ExperimentalVariantError(
+            f"Runner {runner.runner_id!r} requires unknown Steam runtime "
+            f"AppID {appid}; the core cannot select an offline runtime safely."
+        )
+    family, platform_prefix = resolved
+    return _UmuRuntimeRequirement(
+        appid=appid,
+        family=family,
+        platform_prefix=platform_prefix,
+    )
+
+
+def _archive_directory_exists(names: set[str], relative: str) -> bool:
+    prefix = relative.rstrip("/") + "/"
+    return relative in names or any(name.startswith(prefix) for name in names)
+
+
+def _validate_shared_runtime_archive(
+    *,
+    capsule_path: Path,
+    object_id: str,
+    declaration: dict[str, Any],
+    runtime_var: str,
+    vault_root: Path,
+) -> tuple[str, str, str]:
+    try:
+        spec = resolve_capsule_object(
+            capsule_path=capsule_path,
+            object_id=object_id,
+            vault_root=vault_root,
+        )
+        verify_object(spec)
+        members = _inspect_archive(
+            spec.path,
+            allowed_absolute=set(),
+            allow_absolute_symlinks=True,
+            allow_hardlinks=True,
+            declared_format=(
+                declaration.get("format")
+                if isinstance(declaration.get("format"), str)
+                else None
+            ),
+        )
+    except (VerifyError, UmuAdapterError) as exc:
+        raise ExperimentalVariantError(
+            f"Shared UMU object {object_id!r} is not usable: {exc}"
+        ) from exc
+
+    kinds = {item.name: item.kind for item in members}
+    names = set(kinds)
+    runtime_var_path = _safe_relative(
+        runtime_var, "umu.paths.runtime_var"
+    )
+    if runtime_var_path.name != "var":
+        raise ExperimentalVariantError(
+            "Shared UMU runtime_var must identify the runtime var directory."
+        )
+    runtime_root = runtime_var_path.parent.as_posix()
+    family = runtime_var_path.parent.name
+    platform_prefix = _UMU_PLATFORM_PREFIX_BY_FAMILY.get(family)
+    if platform_prefix is None:
+        raise ExperimentalVariantError(
+            f"Unsupported preserved UMU runtime family: {family}."
+        )
+
+    required_files = (
+        f"{runtime_root}/VERSIONS.txt",
+        f"{runtime_root}/_v2-entry-point",
+        f"{runtime_root}/mtree.txt.gz",
+        f"{runtime_root}/pressure-vessel/bin/pv-verify",
+    )
+    missing_files = [
+        path for path in required_files if kinds.get(path) != "regular"
+    ]
+    if missing_files:
+        raise ExperimentalVariantError(
+            f"Preserved {family} is incomplete; missing regular files: "
+            + ", ".join(missing_files)
+        )
+    for directory in (
+        runtime_root,
+        f"{runtime_root}/pressure-vessel",
+        f"{runtime_root}/pressure-vessel/bin",
+        runtime_var_path.as_posix(),
+    ):
+        if not _archive_directory_exists(names, directory):
+            raise ExperimentalVariantError(
+                f"Preserved {family} is incomplete; missing directory: "
+                f"{directory}"
+            )
+
+    runtime_prefix = runtime_root + "/"
+    top_level = {
+        name[len(runtime_prefix):].split("/", 1)[0]
+        for name in names
+        if name.startswith(runtime_prefix)
+        and len(name) > len(runtime_prefix)
+    }
+    platform_directories = sorted(
+        name
+        for name in top_level
+        if re.fullmatch(
+            re.escape(platform_prefix) + r"_platform_.+",
+            name,
+        )
+        and _archive_directory_exists(
+            names, f"{runtime_root}/{name}/files"
+        )
+    )
+    if len(platform_directories) != 1:
+        raise ExperimentalVariantError(
+            f"Preserved {family} is incomplete: expected exactly one "
+            f"{platform_prefix}_platform_* directory with files/."
+        )
+
+    var_prefix = runtime_var_path.as_posix().rstrip("/") + "/"
+    if any(name.startswith(var_prefix) for name in names):
+        raise ExperimentalVariantError(
+            f"Preserved {family} runtime var directory is not empty."
+        )
+
+    has_umu_binary = any(
+        name.startswith("engine/umu-portable/")
+        and PurePosixPath(name).name == "umu-run"
+        and kind == "regular"
+        for name, kind in kinds.items()
+    )
+    has_python_module = any(
+        name.startswith("engine/umu-portable/")
+        and name.endswith("/umu_run/__main__.py")
+        and kind == "regular"
+        for name, kind in kinds.items()
+    )
+    has_python = any(
+        name.startswith("engine/python-portable/")
+        and PurePosixPath(name).name == "python3"
+        and kind == "regular"
+        for name, kind in kinds.items()
+    )
+    if not has_umu_binary and not (has_python_module and has_python):
+        raise ExperimentalVariantError(
+            "Shared UMU object lacks a preserved UMU entrypoint."
+        )
+
+    return family, platform_prefix, platform_directories[0]
 
 
 def _load_json(path: Path, label: str) -> dict[str, Any]:
@@ -354,7 +681,12 @@ def materialize_experimental_wine(
         raise ExperimentalVariantError(str(exc)) from exc
     profile_id = _variant_profile_id("direct-wine", runner)
 
-    with tempfile.TemporaryDirectory(prefix="ogv-experimental-wine-") as temporary:
+    destination = destination.expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".ogv-control-direct-wine-",
+        dir=destination.parent,
+    ) as temporary:
         operational_capsule = _write_overlay(
             Path(temporary) / "capsule",
             derived,
@@ -540,7 +872,7 @@ def materialize_experimental_bottles(
     collection_root: Path,
     capsule_path: Path,
     runner_id: str,
-    bottles_path: Path,
+    bottles_path: Path | None = None,
     bottle_name: str,
     source_profile_id: str | None = None,
     play: bool = False,
@@ -555,12 +887,27 @@ def materialize_experimental_bottles(
     )
     capsule = _load_json(capsule_path, "capsule.json")
 
+    try:
+        bottles_path = require_bottles_managed_path(bottles_path)
+    except BottlesAdapterError as exc:
+        raise ExperimentalVariantError(str(exc)) from exc
+    if not os.access(bottles_path, os.W_OK):
+        raise ExperimentalVariantError(
+            "The Bottles managed path is not writable."
+        )
+
     deployment = None
     runner_created = False
     play_result = None
     played = False
     play_complete: bool | None = None
-    with tempfile.TemporaryDirectory(prefix="ogv-experimental-bottles-") as temporary:
+    # Heavy staging belongs beside the requested final bottle.  This keeps all
+    # large copies on the user-selected filesystem and allows atomic publish;
+    # /tmp is reserved for small control data elsewhere.
+    with tempfile.TemporaryDirectory(
+        prefix=f".ogv-work-{_portable_id(bottle_name)}-",
+        dir=bottles_path,
+    ) as temporary:
         root = Path(temporary)
         operational_capsule, profile_id = _bottles_overlay(
             capsule_path=capsule_path,
@@ -642,8 +989,29 @@ def materialize_experimental_bottles(
     )
 
 
-def _scan_umu_templates(collection_root: Path) -> tuple[UmuBackendTemplate, ...]:
-    result: list[UmuBackendTemplate] = []
+def _runtime_id(digest: str, runtime_var: str) -> str:
+    runtime_tag = hashlib.sha256(runtime_var.encode("utf-8")).hexdigest()[:8]
+    return f"umu-runtime-{digest[:12]}-{runtime_tag}"
+
+
+def _runtime_generation(runtime_var: str) -> int:
+    match = re.search(r"steamrt[-_]?([0-9]+)", runtime_var.casefold())
+    return int(match.group(1)) if match else -1
+
+
+def _scan_shared_umu_runtimes(
+    collection_root: Path,
+) -> tuple[SharedUmuRuntime, ...]:
+    """Discover reusable UMU runtime partitions.
+
+    A game capsule may be the provenance record for a runtime object, but only
+    objects explicitly marked ``shared`` and carrying a runtime role qualify.
+    The reusable identity is content-addressed and independent of the source
+    game.
+    """
+
+    by_identity: dict[tuple[str, str], SharedUmuRuntime] = {}
+    vault_root = collection_root / "01_IMMUTABLE_VAULT"
     capsules_root = collection_root / "02_CAPSULES"
     for capsule_path in sorted(capsules_root.glob("*/capsule.json")):
         try:
@@ -660,7 +1028,8 @@ def _scan_umu_templates(collection_root: Path) -> tuple[UmuBackendTemplate, ...]
         ):
             continue
         object_index = {
-            item.get("id"): item for item in objects
+            item.get("id"): item
+            for item in objects
             if isinstance(item, dict) and isinstance(item.get("id"), str)
         }
         for profile in profiles:
@@ -685,7 +1054,8 @@ def _scan_umu_templates(collection_root: Path) -> tuple[UmuBackendTemplate, ...]
             ):
                 continue
             mappings = [
-                item for item in layout
+                item
+                for item in layout
                 if isinstance(item, dict)
                 and item.get("source") == "engine"
                 and item.get("destination") == "engine"
@@ -693,50 +1063,140 @@ def _scan_umu_templates(collection_root: Path) -> tuple[UmuBackendTemplate, ...]
             ]
             if len(mappings) != 1:
                 continue
-            object_id = mappings[0]["object"]
+            mapping = mappings[0]
+            object_id = mapping["object"]
             declaration = object_index.get(object_id)
             runtime_var = paths.get("runtime_var")
             if (
                 object_id not in dependencies
                 or not isinstance(declaration, dict)
+                or declaration.get("shared") is not True
                 or not isinstance(runtime_var, str)
             ):
                 continue
-            result.append(
-                UmuBackendTemplate(
-                    capsule_id=capsule_id,
-                    capsule_path=capsule_path.resolve(strict=True),
-                    profile_id=profile_id,
+            roles = declaration.get("roles")
+            digest_value = declaration.get("digest")
+            if (
+                not isinstance(roles, list)
+                or "runtime" not in roles
+                or not isinstance(digest_value, str)
+            ):
+                continue
+            digest = digest_value.removeprefix("sha256:")
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                continue
+            runtime_relative = _safe_relative(
+                runtime_var, "umu.paths.runtime_var"
+            ).as_posix()
+            if not runtime_relative.startswith("engine/xdg-data/"):
+                continue
+            try:
+                family, platform_prefix, platform_directory = (
+                    _validate_shared_runtime_archive(
+                        capsule_path=capsule_path,
+                        object_id=object_id,
+                        declaration=declaration,
+                        runtime_var=runtime_relative,
+                        vault_root=vault_root,
+                    )
+                )
+            except ExperimentalVariantError:
+                # An incomplete or corrupt runtime is not a selectable piece.
+                # Materialization must never discover this after copying a game.
+                continue
+
+            raw_policy = mapping.get("archive_policy")
+            archive_policy = (
+                deepcopy(raw_policy) if isinstance(raw_policy, dict) else None
+            )
+            raw_absolute = contract.get("allowed_absolute_symlinks", [])
+            allowed_absolute = tuple(
+                deepcopy(item)
+                for item in raw_absolute
+                if isinstance(item, dict)
+            )
+            key = (digest, runtime_relative)
+            by_identity.setdefault(
+                key,
+                SharedUmuRuntime(
+                    runtime_id=_runtime_id(digest, runtime_relative),
+                    digest=digest,
                     composite_object_id=object_id,
                     composite_object=deepcopy(declaration),
-                    runtime_var=_safe_relative(
-                        runtime_var, "umu.paths.runtime_var"
-                    ).as_posix(),
-                )
+                    runtime_var=runtime_relative,
+                    runtime_family=family,
+                    platform_prefix=platform_prefix,
+                    platform_directory=platform_directory,
+                    archive_policy=archive_policy,
+                    allowed_absolute_symlinks=allowed_absolute,
+                    source_capsule_id=capsule_id,
+                    source_profile_id=profile_id,
+                    source_capsule_path=capsule_path.resolve(strict=True),
+                ),
             )
-    return tuple(result)
+    return tuple(
+        sorted(
+            by_identity.values(),
+            key=lambda item: (
+                -_runtime_generation(item.runtime_var),
+                item.runtime_id,
+            ),
+        )
+    )
 
 
-def list_umu_templates(collection_root: Path) -> tuple[UmuBackendTemplate, ...]:
-    return _scan_umu_templates(collection_root.expanduser().resolve(strict=True))
-
-
-def _select_umu_template(
+def list_shared_umu_runtimes(
     collection_root: Path,
-    template_id: str | None,
-) -> UmuBackendTemplate:
-    templates = _scan_umu_templates(collection_root)
-    if template_id is not None:
-        templates = tuple(
-            item for item in templates if item.template_id == template_id
+) -> tuple[SharedUmuRuntime, ...]:
+    return _scan_shared_umu_runtimes(
+        collection_root.expanduser().resolve(strict=True)
+    )
+
+
+def _select_shared_umu_runtime(
+    collection_root: Path,
+    source_capsule_path: Path,
+    runner: RunnerRecord,
+) -> SharedUmuRuntime:
+    requirement = _required_umu_runtime(collection_root, runner)
+    runtimes = tuple(
+        item
+        for item in _scan_shared_umu_runtimes(collection_root)
+        if item.runtime_family == requirement.family
+        and item.platform_prefix == requirement.platform_prefix
+    )
+    if not runtimes:
+        available = sorted(
+            {
+                item.runtime_family
+                for item in _scan_shared_umu_runtimes(collection_root)
+            }
         )
-    if len(templates) != 1:
-        labels = ", ".join(item.template_id for item in templates) or "none"
+        suffix = (
+            "; complete families available: " + ", ".join(available)
+            if available
+            else "; no complete shared runtime is available"
+        )
         raise ExperimentalVariantError(
-            "Exactly one preserved UMU backend template must be selected; "
-            f"available matches: {labels}."
+            f"Runner {runner.runner_id!r} requires {requirement.family} "
+            f"(Steam AppID {requirement.appid}), but the Vault has no "
+            f"complete matching shared runtime{suffix}."
         )
-    return templates[0]
+
+    try:
+        source_capsule = _load_json(
+            source_capsule_path, "source capsule.json"
+        ).get("capsule_id")
+    except ExperimentalVariantError:
+        source_capsule = None
+    own = tuple(
+        item
+        for item in runtimes
+        if isinstance(source_capsule, str)
+        and item.source_capsule_id == source_capsule
+    )
+    return own[0] if own else runtimes[0]
+
 
 
 def _shell_array(values: list[str]) -> str:
@@ -830,6 +1290,8 @@ fi
 export WINEPREFIX="$PREFIX"
 export PROTONPATH="$PROTON"
 export XDG_DATA_HOME="$XDG_DATA"
+export XDG_CACHE_HOME="$ROOT/engine/xdg-cache"
+export UMU_RUNTIME_UPDATE=0
 export GAMEID={shlex.quote(game_id)}
 export STORE={shlex.quote(store)}
 cd -- "$WORKDIR"
@@ -871,7 +1333,7 @@ def _umu_overlay(
     source_capsule_path: Path,
     source_profile_id: str,
     runner: RunnerRecord,
-    template: UmuBackendTemplate,
+    runtime: SharedUmuRuntime,
     output: Path,
 ) -> tuple[Path, str]:
     try:
@@ -929,7 +1391,7 @@ def _umu_overlay(
 
     existing_ids = set(object_index)
     backend_object_id = _unique_id(existing_ids, "shared-umu-backend")
-    backend_object = deepcopy(template.composite_object)
+    backend_object = deepcopy(runtime.composite_object)
     backend_object["id"] = backend_object_id
     backend_object["description"] = (
         "Preserved UMU, portable Python and Steam Linux Runtime backend "
@@ -947,7 +1409,7 @@ def _umu_overlay(
     sanitizer_item = _write_asset(
         output,
         "launchers/sanear_umu_experimental.sh",
-        _generic_umu_sanitizer(template.runtime_var, runner),
+        _generic_umu_sanitizer(runtime.runtime_var, runner),
         0o755,
     )
 
@@ -972,7 +1434,7 @@ def _umu_overlay(
                 "schema": 0,
                 "contract": "ogv-experimental-umu-v1",
                 "source_profile_id": source_profile_id,
-                "backend_template": template.template_id,
+                "shared_runtime_id": runtime.runtime_id,
                 "runner_id": runner.runner_id,
                 "acceptance_inherited": False,
             }
@@ -982,7 +1444,7 @@ def _umu_overlay(
     launch = source.get("launch")
     if not isinstance(launch, dict):
         launch = {}
-    launch["network"] = "host_default"
+    launch["network"] = "isolated"
     source["launch"] = launch
     source["variant"] = {
         "kind": "experimental",
@@ -990,7 +1452,7 @@ def _umu_overlay(
         "backend": "umu",
         "runner_id": runner.runner_id,
         "acceptance_inherited": False,
-        "backend_template": template.template_id,
+        "shared_runtime_id": runtime.runtime_id,
     }
     source["umu"] = {
         "schema": 0,
@@ -1001,6 +1463,15 @@ def _umu_overlay(
                     "object": backend_object_id,
                     "source": partition,
                     "destination": partition,
+                    **(
+                        {
+                            "archive_policy": deepcopy(
+                                runtime.archive_policy
+                            )
+                        }
+                        if runtime.archive_policy is not None
+                        else {}
+                    ),
                 }
                 for partition in _BACKEND_PARTITIONS
             ],
@@ -1010,7 +1481,10 @@ def _umu_overlay(
                 "destination": f"engine/proton/{runner.source_root}",
             },
         ],
-        "allowed_absolute_symlinks": [],
+        "allowed_absolute_symlinks": [
+            deepcopy(item)
+            for item in runtime.allowed_absolute_symlinks
+        ],
         "nested_archives": [],
         "state_archives": [],
         "launchers": [launcher_item, sanitizer_item],
@@ -1022,13 +1496,13 @@ def _umu_overlay(
         "paths": {
             "launcher": launcher_item["destination"],
             "sanitizer": sanitizer_item["destination"],
-            "runtime_var": template.runtime_var,
+            "runtime_var": runtime.runtime_var,
         },
     }
     source["notes"] = (
         f"User-requested experimental UMU variant generated by Offline Game "
         f"Vault {__version__}. It combines preserved backend "
-        f"{template.template_id!r} and runner {runner.runner_id!r}; no "
+        f"{runtime.runtime_id!r} and runner {runner.runner_id!r}; no "
         "functional acceptance is inherited."
     )
     capsule_path = output / "capsule.json"
@@ -1043,7 +1517,6 @@ def materialize_experimental_umu(
     runner_id: str,
     destination: Path,
     source_profile_id: str | None = None,
-    backend_template_id: str | None = None,
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> ExperimentalVariantResult:
@@ -1055,14 +1528,21 @@ def materialize_experimental_umu(
         backend="umu",
         profile_id=source_profile_id,
     )
-    template = _select_umu_template(collection_root, backend_template_id)
+    runtime = _select_shared_umu_runtime(
+        collection_root, capsule_path, runner
+    )
 
-    with tempfile.TemporaryDirectory(prefix="ogv-experimental-umu-") as temporary:
+    destination = destination.expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".ogv-control-umu-",
+        dir=destination.parent,
+    ) as temporary:
         operational_capsule, profile_id = _umu_overlay(
             source_capsule_path=capsule_path,
             source_profile_id=source_id,
             runner=runner,
-            template=template,
+            runtime=runtime,
             output=Path(temporary) / "capsule",
         )
         result = materialize_umu_profile(
@@ -1097,7 +1577,7 @@ def materialize_experimental_umu(
         acceptance_inherited=False,
         backend_result={
             "materialization": asdict(result),
-            "backend_template": template.template_id,
+            "shared_runtime_id": runtime.runtime_id,
             "play": play_result,
         },
     )

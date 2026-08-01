@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import secrets
 import shutil
 import stat
@@ -48,6 +49,26 @@ from .verifier import (
 
 RECEIPT_NAME = "umu-materialization.json"
 LAST_RUN_RECEIPT = "receipts/last-umu-run.json"
+PORTABLE_RUNTIME_DESTINATION = "metadata/ogv_umu_runtime.py"
+ROOT_LAUNCHER = "JUGAR.sh"
+ROOT_VERIFIER = "VERIFICAR.sh"
+ROOT_UNINSTALLER = "DESINSTALAR.sh"
+
+_RUNTIME_PLATFORM_PREFIX = {
+    "steamrt2": "soldier",
+    "steamrt3": "sniper",
+    "steamrt4": "steamrt4",
+    "steamrt4-arm64": "steamrt4-arm64",
+}
+
+
+def _runtime_platform_prefix(family: str) -> str:
+    try:
+        return _RUNTIME_PLATFORM_PREFIX[family]
+    except KeyError as exc:
+        raise UmuAdapterError(
+            f"Unsupported preserved Steam runtime family: {family}."
+        ) from exc
 
 
 class UmuAdapterError(Exception):
@@ -1373,6 +1394,151 @@ def _offline_environment_variables(
         "UMU_RUNTIME_UPDATE": "0",
     }
 
+def _portable_umu_runtime_source() -> str:
+    from . import portable_umu_runtime
+
+    path = Path(portable_umu_runtime.__file__).resolve()
+    if path.is_symlink() or not path.is_file():
+        raise UmuAdapterError("Cannot locate the portable UMU runtime source.")
+    return path.read_text(encoding="utf-8")
+
+
+def _operational_script(command: str) -> str:
+    if command not in {"play", "verify", "uninstall"}:
+        raise UmuAdapterError("Unsupported operational UMU command.")
+    return f"""#!/usr/bin/env bash
+set -Eeuo pipefail
+root="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd -P)"
+exec "${{PYTHON:-python3}}" \
+  "$root/{PORTABLE_RUNTIME_DESTINATION}" \
+  {command} --root "$root" "$@"
+"""
+
+
+def _write_operational_file(path: Path, payload: str, mode: int) -> None:
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    if path.exists() or path.is_symlink():
+        raise UmuAdapterError(
+            f"Operational path already exists: {path.relative_to(path.parents[1])}"
+        )
+    path.write_text(payload, encoding="utf-8", newline="\n")
+    path.chmod(mode)
+
+
+def _install_operational_scripts(staging: Path) -> dict[str, str]:
+    runtime = staging / PORTABLE_RUNTIME_DESTINATION
+    launcher = staging / ROOT_LAUNCHER
+    verifier = staging / ROOT_VERIFIER
+    uninstaller = staging / ROOT_UNINSTALLER
+    _write_operational_file(runtime, _portable_umu_runtime_source(), 0o600)
+    compile(runtime.read_text(encoding="utf-8"), str(runtime), "exec")
+    _write_operational_file(launcher, _operational_script("play"), 0o700)
+    _write_operational_file(verifier, _operational_script("verify"), 0o700)
+    _write_operational_file(
+        uninstaller, _operational_script("uninstall"), 0o700
+    )
+    if shutil.which("bash") is not None:
+        for script in (launcher, verifier, uninstaller):
+            process = subprocess.run(
+                ["bash", "-n", str(script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if (
+                isinstance(process.returncode, int)
+                and process.returncode != 0
+            ):
+                raise UmuAdapterError(
+                    f"Generated shell script is invalid: {script.name}"
+                )
+    return {
+        "launcher": ROOT_LAUNCHER,
+        "verifier": ROOT_VERIFIER,
+        "uninstaller": ROOT_UNINSTALLER,
+        "portable_runtime": PORTABLE_RUNTIME_DESTINATION,
+    }
+
+
+def _discover_offline_environment(root: Path) -> dict[str, Any]:
+    """Derive and validate one complete preserved UMU Steam runtime."""
+
+    xdg_data_relative = PurePosixPath("engine/xdg-data")
+    xdg_cache_relative = PurePosixPath("engine/xdg-cache")
+    xdg_data = _path_under(root, xdg_data_relative)
+    xdg_cache = _path_under(root, xdg_cache_relative)
+    if xdg_data.is_symlink() or not xdg_data.is_dir():
+        raise UmuAdapterError("Preserved UMU XDG data directory is absent.")
+    if xdg_cache.exists() or xdg_cache.is_symlink():
+        if xdg_cache.is_symlink() or not xdg_cache.is_dir():
+            raise UmuAdapterError("Preserved UMU XDG cache path is invalid.")
+    else:
+        xdg_cache.mkdir(parents=True, mode=0o700)
+
+    umu_root = xdg_data / "umu"
+    if umu_root.is_symlink() or not umu_root.is_dir():
+        raise UmuAdapterError(
+            "Preserved UMU runtime root engine/xdg-data/umu is absent."
+        )
+    candidates = sorted(
+        path
+        for path in umu_root.iterdir()
+        if path.is_dir()
+        and not path.is_symlink()
+        and re.fullmatch(r"steamrt[0-9]+", path.name)
+    )
+    if len(candidates) != 1:
+        raise UmuAdapterError(
+            "Expected exactly one preserved steamrtN runtime under "
+            "engine/xdg-data/umu."
+        )
+    runtime_root = candidates[0]
+    family = runtime_root.name
+    platform_prefix = _runtime_platform_prefix(family)
+    platform_directories = sorted(
+        path
+        for path in runtime_root.glob(f"{platform_prefix}_platform_*")
+        if path.is_dir() and not path.is_symlink()
+    )
+    if len(platform_directories) != 1:
+        raise UmuAdapterError(
+            f"Preserved {family} is incomplete: expected exactly one "
+            f"{platform_prefix}_platform_* directory."
+        )
+    required = [
+        {"path": "VERSIONS.txt", "type": "file"},
+        {"path": "_v2-entry-point", "type": "file"},
+        {"path": "pressure-vessel", "type": "directory"},
+        {
+            "path": platform_directories[0].name,
+            "type": "directory",
+        },
+    ]
+    for index, item in enumerate(required):
+        _verify_required_runtime_path(runtime_root, item, index=index)
+    entrypoint = runtime_root / "_v2-entry-point"
+    if not os.access(entrypoint, os.X_OK):
+        raise UmuAdapterError(
+            f"Preserved {family} _v2-entry-point is not executable."
+        )
+
+    return {
+        "xdg_data_home": xdg_data_relative.as_posix(),
+        "xdg_cache_home": xdg_cache_relative.as_posix(),
+        "runtime_update": False,
+        "runtime": {
+            "family": family,
+            "version": platform_directories[0].name.removeprefix(
+                f"{platform_prefix}_platform_"
+            ),
+            "path": f"umu/{family}",
+            "required_paths": required,
+        },
+        "cache_entries": [],
+    }
+
+
 def materialize_umu_profile(
     *,
     capsule_path: Path,
@@ -1809,10 +1975,19 @@ def materialize_umu_profile(
             allowed_unresolved_prefixes=unresolved_prefixes,
         )
 
+        offline_contract = contract.get("offline_environment")
+        if offline_contract is None:
+            offline_contract = _discover_offline_environment(staging)
         offline_environment = _verify_offline_environment(
             staging,
-            contract.get("offline_environment"),
+            offline_contract,
         )
+        if offline_environment is None:
+            raise UmuAdapterError(
+                "UMU materialization has no verified offline runtime."
+            )
+
+        operational_paths = _install_operational_scripts(staging)
 
         paths = contract.get("paths")
         if not isinstance(paths, dict):
@@ -1852,6 +2027,7 @@ def materialize_umu_profile(
             "symlink_manifests": symlink_receipts,
             "hardlink_manifests": hardlink_receipts,
             "offline_environment": offline_environment,
+            "operational_paths": operational_paths,
             "mutable_paths": mutable_paths,
             "paths": {
                 "launcher": launcher_relative.as_posix(),
@@ -1920,6 +2096,7 @@ def verify_umu_materialization(
     hardlink_manifests = receipt.get("hardlink_manifests", [])
     mutable_paths = receipt.get("mutable_paths")
     paths = receipt.get("paths")
+    operational_paths = receipt.get("operational_paths")
     if (
         not isinstance(launchers, list)
         or not isinstance(protected, list)
@@ -1927,6 +2104,7 @@ def verify_umu_materialization(
         or not isinstance(hardlink_manifests, list)
         or not isinstance(mutable_paths, list)
         or not isinstance(paths, dict)
+        or not isinstance(operational_paths, dict)
     ):
         raise UmuAdapterError("UMU receipt is incomplete.")
 
@@ -1971,6 +2149,21 @@ def verify_umu_materialization(
         receipt.get("offline_environment"),
     )
 
+    for key in ("launcher", "verifier", "uninstaller", "portable_runtime"):
+        relative = _safe_relative(
+            operational_paths.get(key),
+            f"receipt.operational_paths.{key}",
+        )
+        path = _path_under(destination, relative)
+        if path.is_symlink() or not path.is_file():
+            raise UmuAdapterError(
+                f"UMU operational file is absent: {key}"
+            )
+        if key != "portable_runtime" and not os.access(path, os.X_OK):
+            raise UmuAdapterError(
+                f"UMU operational script is not executable: {key}"
+            )
+
     runtime_var_relative = _safe_relative(
         paths.get("runtime_var"), "receipt.paths.runtime_var"
     )
@@ -2002,75 +2195,27 @@ def run_umu_materialization(
     destination: Path,
     arguments: Sequence[str] = (),
 ) -> UmuRunResult:
-    """Run a verified UMU materialization and sanitize it after exit."""
+    """Run through the generated JUGAR.sh contract with network isolation."""
+
+    from .portable_umu_runtime import PortableUmuError, play as portable_play
 
     destination = _canonical_destination(destination)
-    verification = verify_umu_materialization(destination=destination)
-    receipt = _load_receipt(destination)
-    paths = receipt["paths"]
-
-    launcher_relative = _safe_relative(
-        paths.get("launcher"), "receipt.paths.launcher"
-    )
-    sanitizer_relative = _safe_relative(
-        paths.get("sanitizer"), "receipt.paths.sanitizer"
-    )
-    launcher = _path_under(destination, launcher_relative)
-    sanitizer = _path_under(destination, sanitizer_relative)
-
-    environment = os.environ.copy()
-    environment.update(
-        _offline_environment_variables(destination, receipt)
-    )
-
-    started = time.monotonic_ns()
-    process = subprocess.run(
-        [str(launcher), *arguments],
-        cwd=destination,
-        env=environment,
-        check=False,
-    )
-    duration_ms = (time.monotonic_ns() - started) // 1_000_000
-
-    sanitizer_process = subprocess.run(
-        [str(sanitizer)],
-        cwd=destination,
-        env=environment,
-        check=False,
-    )
-    verified_after = False
-    if sanitizer_process.returncode == 0:
-        try:
-            verify_umu_materialization(destination=destination)
-            verified_after = True
-        except UmuAdapterError:
-            verified_after = False
-
-    complete = (
-        process.returncode == 0
-        and sanitizer_process.returncode == 0
-        and verified_after
-    )
-    result = UmuRunResult(
+    try:
+        document = portable_play(destination, arguments=arguments)
+    except PortableUmuError as exc:
+        raise UmuAdapterError(str(exc)) from exc
+    return UmuRunResult(
         schema=0,
-        capsule_id=verification.capsule_id,
-        profile_id=verification.profile_id,
+        capsule_id=str(document["capsule_id"]),
+        profile_id=str(document["profile_id"]),
         backend="umu",
         destination=str(destination),
-        process_rc=process.returncode,
-        duration_ms=int(duration_ms),
-        sanitizer_rc=sanitizer_process.returncode,
-        verified_after_run=verified_after,
-        complete=complete,
+        process_rc=int(document["process_rc"]),
+        duration_ms=int(document["duration_ms"]),
+        sanitizer_rc=int(document["sanitizer_rc"]),
+        verified_after_run=bool(document["verified_after_run"]),
+        complete=bool(document["complete"]),
     )
-    document = result.to_dict()
-    document["created_at"] = _now()
-    document["destination"] = "."
-    _write_json_atomic(
-        destination / LAST_RUN_RECEIPT,
-        document,
-    )
-    return result
 
 
 def remove_umu_materialization(

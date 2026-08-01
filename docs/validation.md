@@ -120,7 +120,7 @@ The UMU suite additionally verifies:
 The test suite uses synthetic objects. Commercial game data, private state, and
 proprietary runtime files are not present in Git.
 
-## Experimental-variant validation in 0.11.0
+## Experimental-variant validation in 0.11.0–0.11.2
 
 The experimental suite additionally verifies:
 

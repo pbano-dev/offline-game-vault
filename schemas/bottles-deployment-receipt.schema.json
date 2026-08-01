@@ -55,6 +55,7 @@
               ]
             },
             "backend_template": {
+              "description": "Deprecated 0.11.0 provenance field retained for receipt compatibility.",
               "minLength": 1,
               "type": "string"
             },
@@ -62,6 +63,10 @@
               "const": "experimental"
             },
             "runner_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "shared_runtime_id": {
               "minLength": 1,
               "type": "string"
             },
@@ -110,6 +115,30 @@
     "materialization_receipt_id": {
       "format": "uuid",
       "type": "string"
+    },
+    "operational_paths": {
+      "additionalProperties": false,
+      "properties": {
+        "launcher": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "portable_runtime": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "uninstaller": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "verifier": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "required": [
+        "launcher",
+        "verifier",
+        "uninstaller",
+        "portable_runtime"
+      ],
+      "type": "object"
     },
     "orchestrator_version": {
       "minLength": 1,

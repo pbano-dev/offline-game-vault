@@ -866,6 +866,7 @@
           ]
         },
         "backend_template": {
+          "description": "Deprecated 0.11.0 provenance field retained for receipt compatibility.",
           "minLength": 1,
           "type": "string"
         },
@@ -873,6 +874,10 @@
           "const": "experimental"
         },
         "runner_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "shared_runtime_id": {
           "minLength": 1,
           "type": "string"
         },

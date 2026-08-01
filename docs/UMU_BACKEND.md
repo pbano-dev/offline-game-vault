@@ -107,3 +107,23 @@ publish private collection evidence or transfer acceptance to another game.
 ## Verification evidence
 
 `verify-umu` reports protected-file, symlink, and `hardlink_group_count` values. The topology counts are part of the verification evidence.
+
+## Shared runtime selection for experimental variants
+
+A Proton runner is paired with the Steam Linux Runtime named by the archived
+runner's `toolmanifest.vdf` `require_tool_appid`; runtime generation is not
+guessed from a directory name or from another game's profile. The current
+supported mappings are:
+
+```text
+1391110 → steamrt2 → soldier_platform_*
+1628350 → steamrt3 → sniper_platform_*
+4183110 → steamrt4 → steamrt4_platform_*
+```
+
+The shared runtime archive is inspected before selection. Corrupt objects,
+missing `VERSIONS.txt`, `_v2-entry-point`, `mtree.txt.gz`,
+`pressure-vessel/bin/pv-verify`, `var`, or a unique matching platform
+directory are excluded. A missing exact family match aborts before the game is
+materialized.
+

@@ -70,6 +70,24 @@ class UmuAdapterTests(unittest.TestCase):
         self.state_root = self.root / "state"
         self.state_root.mkdir()
         self.destination = self.root / "materialized"
+        self.original_path = os.environ.get("PATH", "")
+        test_bin = self.root / "bin"
+        test_bin.mkdir()
+        systemd_run = test_bin / "systemd-run"
+        systemd_run.write_text(
+            "#!/bin/sh\n"
+            "while [ \"$#\" -gt 0 ]; do\n"
+            "  if [ \"$1\" = \"--\" ]; then\n"
+            "    shift\n"
+            "    exec \"$@\"\n"
+            "  fi\n"
+            "  shift\n"
+            "done\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        systemd_run.chmod(0o755)
+        os.environ["PATH"] = str(test_bin) + os.pathsep + self.original_path
 
         self.prefix_archive = self.root / "prefix.tar"
         make_tar(
@@ -98,8 +116,35 @@ class UmuAdapterTests(unittest.TestCase):
             self.umu_archive,
             {
                 "engine/tool.txt": (b"umu\n", 0o644),
+                "engine/xdg-data/umu/steamrt4/VERSIONS.txt": (
+                    b"steamrt4\ttest\n",
+                    0o644,
+                ),
+                "engine/xdg-data/umu/steamrt4/_v2-entry-point": (
+                    b"#!/bin/sh\nexit 0\n",
+                    0o755,
+                ),
+                (
+                    "engine/xdg-data/umu/steamrt4/"
+                    "steamrt4_platform_test/files/runtime.bin"
+                ): (b"runtime\n", 0o644),
             },
-            directories=("engine/runtime", "engine/runtime/var"),
+            directories=(
+                "engine/runtime",
+                "engine/runtime/var",
+                "engine/xdg-data",
+                "engine/xdg-data/umu",
+                "engine/xdg-data/umu/steamrt4",
+                "engine/xdg-data/umu/steamrt4/pressure-vessel",
+                (
+                    "engine/xdg-data/umu/steamrt4/"
+                    "steamrt4_platform_test"
+                ),
+                (
+                    "engine/xdg-data/umu/steamrt4/"
+                    "steamrt4_platform_test/files"
+                ),
+            ),
         )
         self.umu_digest = sha256_file(self.umu_archive)
 
@@ -336,6 +381,7 @@ class UmuAdapterTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        os.environ["PATH"] = self.original_path
         self.temporary.cleanup()
 
     @unittest.skipIf(
@@ -364,6 +410,10 @@ class UmuAdapterTests(unittest.TestCase):
             save_id="main",
         )
         self.assertTrue(materialized.complete)
+        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
+            path = self.destination / name
+            self.assertTrue(path.is_file())
+            self.assertTrue(os.access(path, os.X_OK))
         self.assertEqual(materialized.selected_save, "main")
         self.assertEqual(
             (self.destination / "payload/prefix/save.bin").read_bytes(),

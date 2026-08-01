@@ -24,8 +24,9 @@ capsule operational audit
 
 UMU profiles can declare exact runners, Steam Linux Runtime archives, offline
 caches, archive policies, symlink manifests, hardlink manifests, protected
-files, and a controlled offline environment. Update suppression is not network
-isolation: containment remains a separate caller or adapter responsibility.
+files, and a controlled offline environment. For published UMU derivatives,
+the generated `JUGAR.sh` validates the preserved runtime and launches it inside
+a private network namespace with updates disabled.
 
 ## Architecture status
 
@@ -74,3 +75,11 @@ records `acceptance_inherited: false`, and leaves the source capsule unchanged.
 The experimental path never downloads components and never falls back to a
 system runner. Missing or corrupt objects, unsafe paths, incompatible runners,
 and absent preserved backend pieces remain blocking errors.
+
+### Operational scripts in materializations
+
+Bottles, Direct-Wine, and UMU derivatives all publish `JUGAR.sh`,
+`VERIFICAR.sh`, and `DESINSTALAR.sh` at their root. The GUI uses these scripts
+after materialization instead of reconstructing backend launch commands.
+UMU refuses incomplete preserved runtimes and launches with network isolation;
+it never downloads a missing Steam Linux Runtime.

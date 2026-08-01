@@ -40,6 +40,9 @@ from .state_manager import (
 PORTABLE_RUNTIME_DESTINATION = "metadata/ogv_playable_runtime.py"
 SOURCE_RECEIPT_DESTINATION = "metadata/source-materialization-receipt.json"
 BASELINE_STATE_DESTINATION = "metadata/baseline-state.json"
+ROOT_LAUNCHER = PurePosixPath("JUGAR.sh")
+ROOT_VERIFIER = PurePosixPath("VERIFICAR.sh")
+ROOT_UNINSTALLER = PurePosixPath("DESINSTALAR.sh")
 
 
 class PlayableError(Exception):
@@ -503,9 +506,19 @@ def _launcher_text() -> str:
     return """#!/usr/bin/env bash
 set -Eeuo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-exec "${PYTHON:-python3}" \\
-  "$root/metadata/ogv_playable_runtime.py" \\
-  play --root "$root" -- "$@"
+exec "${PYTHON:-python3}" \
+  "$root/metadata/ogv_playable_runtime.py" \
+  play --root "$root" "$@"
+"""
+
+
+def _verifier_text() -> str:
+    return """#!/usr/bin/env bash
+set -Eeuo pipefail
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+exec "${PYTHON:-python3}" \
+  "$root/metadata/ogv_playable_runtime.py" \
+  verify --root "$root" "$@"
 """
 
 
@@ -513,8 +526,8 @@ def _uninstaller_text() -> str:
     return """#!/usr/bin/env bash
 set -Eeuo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-exec "${PYTHON:-python3}" \\
-  "$root/metadata/ogv_playable_runtime.py" \\
+exec "${PYTHON:-python3}" \
+  "$root/metadata/ogv_playable_runtime.py" \
   uninstall --root "$root" "$@"
 """
 
@@ -918,12 +931,37 @@ def materialize_playable_profile(
         for relative_name in ("home", "tmp", "cache", "config", "data"):
             (runtime_root / relative_name).mkdir(mode=0o700, exist_ok=True)
 
-        launcher_path = _path_under(stage, contract.launcher)
-        uninstaller_path = _path_under(stage, contract.uninstaller)
+        launcher_path = _path_under(stage, ROOT_LAUNCHER)
+        verifier_path = _path_under(stage, ROOT_VERIFIER)
+        uninstaller_path = _path_under(stage, ROOT_UNINSTALLER)
         _write_atomic(launcher_path, _launcher_text(), 0o700)
+        _write_atomic(verifier_path, _verifier_text(), 0o700)
         _write_atomic(uninstaller_path, _uninstaller_text(), 0o700)
-        _validate_generated_shell(launcher_path)
-        _validate_generated_shell(uninstaller_path)
+        compatibility_scripts: list[PurePosixPath] = []
+        if contract.launcher != ROOT_LAUNCHER:
+            compatibility_launcher = _path_under(stage, contract.launcher)
+            _write_atomic(
+                compatibility_launcher, _launcher_text(), 0o700
+            )
+            compatibility_scripts.append(contract.launcher)
+        if contract.uninstaller != ROOT_UNINSTALLER:
+            compatibility_uninstaller = _path_under(
+                stage, contract.uninstaller
+            )
+            _write_atomic(
+                compatibility_uninstaller, _uninstaller_text(), 0o700
+            )
+            compatibility_scripts.append(contract.uninstaller)
+        for script in (
+            launcher_path,
+            verifier_path,
+            uninstaller_path,
+            *[
+                _path_under(stage, relative)
+                for relative in compatibility_scripts
+            ],
+        ):
+            _validate_generated_shell(script)
 
         for required_name, relative in {
             "prefix": contract.prefix,
@@ -974,8 +1012,10 @@ def materialize_playable_profile(
                 contract.prefix,
                 contract.runner,
                 contract.runtime,
-                contract.launcher,
-                contract.uninstaller,
+                ROOT_LAUNCHER,
+                ROOT_VERIFIER,
+                ROOT_UNINSTALLER,
+                *compatibility_scripts,
                 PurePosixPath("metadata"),
                 PurePosixPath("receipts"),
                 PurePosixPath(PLAYABLE_RECEIPT_NAME),
@@ -1010,10 +1050,14 @@ def materialize_playable_profile(
                 "entrypoint": contract.launch["entrypoint"],
                 "working_directory": contract.launch["working_directory"],
                 "runtime": contract.runtime.as_posix(),
-                "launcher": contract.launcher.as_posix(),
-                "uninstaller": contract.uninstaller.as_posix(),
+                "launcher": ROOT_LAUNCHER.as_posix(),
+                "verifier": ROOT_VERIFIER.as_posix(),
+                "uninstaller": ROOT_UNINSTALLER.as_posix(),
                 "portable_runtime": PORTABLE_RUNTIME_DESTINATION,
             },
+            "operational_aliases": [
+                path.as_posix() for path in compatibility_scripts
+            ],
             "prefix_operations": list(contract.prefix_operations),
             "runner_symlink_count": runner_symlink_count,
             "protected_files": list(protected),

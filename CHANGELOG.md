@@ -1,5 +1,85 @@
 # Changelog
 
+## 0.11.3 — 2026-08-01
+
+### Fixed
+
+- Bottles experimental materialization again uses the directory reported by
+  `bottles-cli info bottles-path` for every capsule. An optional
+  `--bottles-path` value is only an assertion and cannot redirect deployment
+  to an arbitrary directory.
+- Bottles heavy staging is created inside that managed directory, the final
+  bottle is published atomically there, and the core verifies that
+  `bottles-cli` enumerates it before reporting success.
+- UMU runtime selection now reads Proton's preserved `toolmanifest.vdf` and
+  resolves the exact Steam Linux Runtime family required by
+  `require_tool_appid`.
+- Runtime validation uses the real platform-directory prefix for each family:
+  `soldier_platform_*` for steamrt2, `sniper_platform_*` for steamrt3, and
+  `steamrt4_platform_*` for steamrt4.
+- Incomplete or corrupt shared runtime objects are excluded before selection.
+  A runner is never paired with a different runtime family merely because it
+  is the first preserved candidate.
+
+### Validation
+
+- Regression tests cover managed Bottles-path discovery, rejection of an
+  arbitrary Bottles path, registration of the published bottle, destination-
+  local staging, steamrt3/sniper validation, and exact runner/runtime matching.
+
+## 0.11.2 — 2026-08-01
+
+### Fixed
+
+- Every newly published Bottles, Direct-Wine, and UMU materialization now
+  contains executable root-level `JUGAR.sh`, `VERIFICAR.sh`, and
+  `DESINSTALAR.sh` scripts plus its authoritative backend receipt.
+- Bottles operational scripts are self-contained and no longer depend on a
+  source checkout of the core for play, verification, or removal.
+- UMU materialization now rejects an absent or incomplete preserved
+  `steamrtN` runtime before publication or launch.
+- UMU execution is forced through a private network namespace and exports
+  `UMU_RUNTIME_UPDATE=0`; missing runtime components therefore abort instead
+  of being downloaded.
+- Direct-Wine keeps legacy contract launcher names as compatibility aliases
+  while always publishing the three canonical root scripts.
+
+### Validation
+
+- Regression tests execute the generated Direct-Wine and Bottles scripts.
+- UMU tests use a complete preserved runtime and a synthetic network-isolated
+  `systemd-run` harness.
+- All materializers assert the canonical operational script set.
+
+## 0.11.1 — 2026-08-01
+
+### Fixed
+
+- Bottles experimental materialization now creates its heavy working tree
+  inside the user-selected managed Bottles directory, not in the host `/tmp`.
+- Direct-Wine and UMU control overlays are also created beside the selected
+  destination; backend materializers continue to stage and publish atomically
+  on that filesystem.
+- UMU no longer accepts a game capsule/profile as a user-selected backend
+  template. The core resolves a reusable, content-addressed shared runtime
+  automatically.
+
+### Changed
+
+- Reusable UMU/Python/Steam Runtime objects must be explicitly marked
+  `shared: true` and carry the `runtime` role.
+- UMU receipts record `shared_runtime_id`; source capsule/profile identifiers
+  remain provenance and are not runtime identities.
+- Schemas continue to accept the deprecated 0.11.0
+  `backend_template` provenance field so existing receipts remain valid.
+- Added `list-shared-umu-runtimes` for diagnostics. The normal materialization
+  command does not require or accept a runtime-template selection.
+
+### Validation
+
+- Tests cover destination-local Bottles staging, cleanup, automatic shared UMU
+  runtime selection, and rejection of game-specific runtime objects.
+
 All notable project changes are documented here.
 
 ## 0.11.0 — 2026-08-01

@@ -33,7 +33,7 @@ published capsule. The resulting backend receipt records:
 - the source profile;
 - the selected backend;
 - the selected preserved runner;
-- the preserved UMU backend template when applicable;
+- an automatically resolved shared UMU runtime when applicable;
 - `kind: experimental`;
 - `acceptance_inherited: false`.
 
@@ -48,7 +48,7 @@ OGV installation marker and its complete tree still matches that marker.
 UMU synthesis requires two preserved pieces:
 
 1. a Proton runner;
-2. a preserved UMU/Python/Steam Linux Runtime backend template.
+2. a reusable, content-addressed UMU/Python/Steam Linux Runtime object.
 
 Windows-native synthesis is outside this decision.
 
@@ -60,7 +60,7 @@ The core may reject an operation for material reasons, including:
 - unsafe archives, paths, links, or destination topology;
 - a runner without the executables required by the selected backend;
 - a missing preserved UMU backend;
-- an ambiguous source layout or backend template;
+- an ambiguous source layout or missing shared runtime;
 - an occupied or unsafe destination;
 - a failed backend verification.
 

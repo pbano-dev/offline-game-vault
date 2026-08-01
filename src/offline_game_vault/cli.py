@@ -17,13 +17,14 @@ from .bottles_adapter import (
     BottlesRemovalResult,
     build_bottles_launch_plan,
     deploy_bottles_profile,
+    discover_bottles_path,
     remove_bottles_deployment,
     run_bottles_deployment,
     verify_bottles_deployment,
 )
 from .experimental import (
     ExperimentalVariantError,
-    list_umu_templates,
+    list_shared_umu_runtimes,
     materialize_experimental_bottles,
     materialize_experimental_umu,
     materialize_experimental_wine,
@@ -1264,19 +1265,23 @@ def _command_list_preserved_runners(args: argparse.Namespace) -> int:
     return 0
 
 
-def _command_list_umu_templates(args: argparse.Namespace) -> int:
-    templates = list_umu_templates(args.collection_root)
+def _command_list_shared_umu_runtimes(args: argparse.Namespace) -> int:
+    runtimes = list_shared_umu_runtimes(args.collection_root)
     document = {
         "schema": 0,
-        "templates": [
+        "runtimes": [
             {
-                "template_id": item.template_id,
-                "capsule_id": item.capsule_id,
-                "profile_id": item.profile_id,
+                "runtime_id": item.runtime_id,
+                "digest": "sha256:" + item.digest,
                 "composite_object_id": item.composite_object_id,
                 "runtime_var": item.runtime_var,
+                "runtime_family": item.runtime_family,
+                "platform_prefix": item.platform_prefix,
+                "platform_directory": item.platform_directory,
+                "source_capsule_id": item.source_capsule_id,
+                "source_profile_id": item.source_profile_id,
             }
-            for item in templates
+            for item in runtimes
         ],
     }
     if args.json:
@@ -1289,11 +1294,34 @@ def _command_list_umu_templates(args: argparse.Namespace) -> int:
             )
         )
     else:
-        for item in templates:
+        for item in runtimes:
             print(
-                f"{item.template_id}: object={item.composite_object_id}, "
+                f"{item.runtime_id}: digest={item.digest}, "
                 f"runtime_var={item.runtime_var}"
             )
+    return 0
+
+
+
+
+def _command_discover_bottles_path(args: argparse.Namespace) -> int:
+    path = discover_bottles_path(flatpak_app=args.flatpak_app)
+    document = {
+        "schema": 0,
+        "flatpak_app": args.flatpak_app,
+        "bottles_path": str(path),
+    }
+    if args.json:
+        print(
+            json.dumps(
+                document,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(path)
     return 0
 
 
@@ -1326,13 +1354,12 @@ def _command_materialize_experimental(args: argparse.Namespace) -> int:
         result = materialize_experimental_umu(
             **common,
             destination=args.destination,
-            backend_template_id=args.umu_backend,
             arguments=forwarded,
         )
     else:
-        if args.bottles_path is None or not args.bottle_name:
+        if not args.bottle_name:
             raise ExperimentalVariantError(
-                "--bottles-path and --bottle-name are required for Bottles."
+                "--bottle-name is required for Bottles."
             )
         if forwarded:
             raise ExperimentalVariantError(
@@ -2213,6 +2240,27 @@ def build_parser() -> argparse.ArgumentParser:
         handler=_command_remove_bottles
     )
 
+    discover_bottles_parser = commands.add_parser(
+        "discover-bottles-path",
+        help=(
+            "Query the active Bottles Flatpak for its effective managed "
+            "bottles directory without network access."
+        ),
+    )
+    discover_bottles_parser.add_argument(
+        "--flatpak-app",
+        default="com.usebottles.bottles",
+        help="Bottles Flatpak application ID.",
+    )
+    discover_bottles_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    discover_bottles_parser.set_defaults(
+        handler=_command_discover_bottles_path
+    )
+
     list_runners_parser = commands.add_parser(
         "list-preserved-runners",
         help="List structurally usable runners preserved in the collection.",
@@ -2230,22 +2278,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_runners_parser.set_defaults(handler=_command_list_preserved_runners)
 
-    list_umu_templates_parser = commands.add_parser(
-        "list-umu-templates",
-        help="List preserved UMU/Python/Steam Runtime backend templates.",
+    list_umu_runtimes_parser = commands.add_parser(
+        "list-shared-umu-runtimes",
+        help="List reusable UMU/Python/Steam Runtime objects.",
     )
-    list_umu_templates_parser.add_argument(
+    list_umu_runtimes_parser.add_argument(
         "--collection-root",
         type=Path,
         required=True,
         help="Offline Game Vault collection root.",
     )
-    list_umu_templates_parser.add_argument(
+    list_umu_runtimes_parser.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
     )
-    list_umu_templates_parser.set_defaults(handler=_command_list_umu_templates)
+    list_umu_runtimes_parser.set_defaults(
+        handler=_command_list_shared_umu_runtimes
+    )
 
     experimental_parser = commands.add_parser(
         "materialize-experimental",
@@ -2295,16 +2345,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verified state backup for Direct-Wine.",
     )
     experimental_parser.add_argument(
-        "--umu-backend",
-        help=(
-            "Preserved UMU backend template as CAPSULE_ID/PROFILE_ID. "
-            "May be omitted when exactly one exists."
-        ),
-    )
-    experimental_parser.add_argument(
         "--bottles-path",
         type=Path,
-        help="Effective managed Bottles directory.",
+        help=(
+            "Optional assertion of the managed Bottles directory. The core "
+            "always discovers the effective path via bottles-cli and rejects "
+            "a different value."
+        ),
     )
     experimental_parser.add_argument(
         "--bottle-name",

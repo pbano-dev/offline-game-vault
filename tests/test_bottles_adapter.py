@@ -30,6 +30,17 @@ class BottlesAdapterTests(unittest.TestCase):
         self.fixture = self.root / "fixture"
         self.bottles.mkdir()
         self.fixture.mkdir()
+        self._discover_patch = mock.patch(
+            "offline_game_vault.bottles_adapter.discover_bottles_path",
+            return_value=self.bottles.resolve(),
+        )
+        self._register_patch = mock.patch(
+            "offline_game_vault.bottles_adapter.assert_bottle_registered"
+        )
+        self._discover_patch.start()
+        self._register_patch.start()
+        self.addCleanup(self._discover_patch.stop)
+        self.addCleanup(self._register_patch.stop)
 
         self.object_root = (
             self.materialization

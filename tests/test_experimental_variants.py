@@ -3,14 +3,17 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
+import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from offline_game_vault.experimental import (
     ExperimentalVariantError,
-    list_umu_templates,
+    list_shared_umu_runtimes,
     materialize_experimental_bottles,
     materialize_experimental_umu,
     materialize_experimental_wine,
@@ -58,6 +61,23 @@ class ExperimentalVariantTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        self._experimental_path_patch = patch(
+            "offline_game_vault.experimental.require_bottles_managed_path",
+            side_effect=lambda requested=None: Path(requested).resolve(),
+        )
+        self._adapter_path_patch = patch(
+            "offline_game_vault.bottles_adapter.require_bottles_managed_path",
+            side_effect=lambda requested=None: Path(requested).resolve(),
+        )
+        self._register_patch = patch(
+            "offline_game_vault.bottles_adapter.assert_bottle_registered"
+        )
+        self._experimental_path_patch.start()
+        self._adapter_path_patch.start()
+        self._register_patch.start()
+        self.addCleanup(self._experimental_path_patch.stop)
+        self.addCleanup(self._adapter_path_patch.stop)
+        self.addCleanup(self._register_patch.stop)
         self.collection = self.root / "collection"
         self.immutable = self.collection / "01_IMMUTABLE_VAULT"
         self.immutable.mkdir(parents=True)
@@ -105,6 +125,12 @@ class ExperimentalVariantTests(unittest.TestCase):
                 "ge-proton/proton": (
                     b"#!/bin/sh\nexit 0\n",
                     0o755,
+                ),
+                "ge-proton/toolmanifest.vdf": (
+                    b'"manifest"\n{\n'
+                    b'  "require_tool_appid" "4183110"\n'
+                    b'}\n',
+                    0o644,
                 ),
             },
         )
@@ -330,7 +356,14 @@ class ExperimentalVariantTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def _add_umu_backend(self) -> None:
+    def _add_umu_backend(
+        self,
+        *,
+        family: str = "steamrt4",
+        platform_prefix: str = "steamrt4",
+    ) -> None:
+        runtime_root = f"engine/xdg-data/umu/{family}"
+        platform_name = f"{platform_prefix}_platform_test"
         archive = self.root / "umu-backend.tar.gz"
         _make_tar_gz(
             archive,
@@ -341,8 +374,13 @@ class ExperimentalVariantTests(unittest.TestCase):
                 "engine/umu-portable",
                 "engine/umu-portable/bin",
                 "engine/xdg-data",
-                "engine/xdg-data/SteamLinuxRuntime_sniper",
-                "engine/xdg-data/SteamLinuxRuntime_sniper/var",
+                "engine/xdg-data/umu",
+                runtime_root,
+                f"{runtime_root}/var",
+                f"{runtime_root}/pressure-vessel",
+                f"{runtime_root}/pressure-vessel/bin",
+                f"{runtime_root}/{platform_name}",
+                f"{runtime_root}/{platform_name}/files",
             ),
             entries={
                 "engine/python-portable/bin/python3": (
@@ -353,7 +391,23 @@ class ExperimentalVariantTests(unittest.TestCase):
                     b"#!/bin/sh\nexit 0\n",
                     0o755,
                 ),
-                "engine/xdg-data/SteamLinuxRuntime_sniper/tool": (
+                f"{runtime_root}/VERSIONS.txt": (
+                    f"{family}\ttest\n".encode("utf-8"),
+                    0o644,
+                ),
+                f"{runtime_root}/_v2-entry-point": (
+                    b"#!/bin/sh\nexit 0\n",
+                    0o755,
+                ),
+                f"{runtime_root}/mtree.txt.gz": (
+                    b"mtree",
+                    0o644,
+                ),
+                f"{runtime_root}/pressure-vessel/bin/pv-verify": (
+                    b"#!/bin/sh\nexit 0\n",
+                    0o755,
+                ),
+                f"{runtime_root}/{platform_name}/files/runtime.bin": (
                     b"runtime",
                     0o644,
                 ),
@@ -416,8 +470,7 @@ class ExperimentalVariantTests(unittest.TestCase):
                                     "launcher": "unused",
                                     "sanitizer": "unused",
                                     "runtime_var": (
-                                        "engine/xdg-data/"
-                                        "SteamLinuxRuntime_sniper/var"
+                                        f"{runtime_root}/var"
                                     ),
                                 },
                             },
@@ -463,6 +516,28 @@ class ExperimentalVariantTests(unittest.TestCase):
         self.assertTrue(result.materialized)
         self.assertFalse(result.acceptance_inherited)
         self.assertEqual(result.backend, "direct-wine")
+        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
+            path = destination / name
+            self.assertTrue(path.is_file())
+            self.assertTrue(path.stat().st_mode & 0o100)
+        verified_script = subprocess.run(
+            [str(destination / "VERIFICAR.sh"), "--json"],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(verified_script.returncode, 0, verified_script.stderr)
+        played_script = subprocess.run(
+            [str(destination / "JUGAR.sh"), "--json"],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(played_script.returncode, 0, played_script.stderr)
         self.assertEqual(
             (
                 destination
@@ -494,6 +569,50 @@ class ExperimentalVariantTests(unittest.TestCase):
             bottle_name="First",
         )
         self.assertTrue(first.materialized)
+        first_root = bottles / "First"
+        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
+            path = first_root / name
+            self.assertTrue(path.is_file())
+            self.assertTrue(path.stat().st_mode & 0o100)
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        flatpak = fake_bin / "flatpak"
+        flatpak.write_text(
+            "#!/bin/sh\n"
+            "case \"$*\" in\n"
+            "  *\"info bottles-path\"*) "
+            f"printf '%s\\n' '{bottles}' ;;\n"
+            "  *\"list bottles\"*) "
+            "printf '%s\\n' '{\"bottles\":[\"First\"]}' ;;\n"
+            "  *) exit 0 ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        flatpak.chmod(0o755)
+        environment = dict(os.environ)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment.get(
+            "PATH", ""
+        )
+        verified_script = subprocess.run(
+            [str(first_root / "VERIFICAR.sh"), "--json"],
+            cwd=first_root,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(verified_script.returncode, 0, verified_script.stderr)
+        played_script = subprocess.run(
+            [str(first_root / "JUGAR.sh"), "--json"],
+            cwd=first_root,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(played_script.returncode, 0, played_script.stderr)
         runner_root = self.root / "components/runners/ge-proton"
         self.assertTrue(
             (runner_root / ".ogv-preserved-runner.json").is_file()
@@ -522,6 +641,35 @@ class ExperimentalVariantTests(unittest.TestCase):
                 bottles_path=bottles,
                 bottle_name="Third",
             )
+
+    def test_bottles_heavy_workspace_is_created_under_selected_path(self) -> None:
+        bottles = self.root / "components/bottles"
+        bottles.mkdir(parents=True)
+        real_temporary_directory = tempfile.TemporaryDirectory
+        parents: list[Path | None] = []
+
+        def tracked(*args: object, **kwargs: object):
+            raw = kwargs.get("dir")
+            parents.append(Path(raw) if raw is not None else None)
+            return real_temporary_directory(*args, **kwargs)
+
+        with patch(
+            "offline_game_vault.experimental.tempfile.TemporaryDirectory",
+            side_effect=tracked,
+        ):
+            result = materialize_experimental_bottles(
+                collection_root=self.collection,
+                capsule_path=self.capsule_path,
+                runner_id="ge-proton",
+                bottles_path=bottles,
+                bottle_name="StagingTest",
+            )
+
+        self.assertTrue(result.materialized)
+        self.assertEqual(parents, [bottles.resolve()])
+        self.assertFalse(
+            any(path.name.startswith(".ogv-work-") for path in bottles.iterdir())
+        )
 
     def test_bottles_synthesizes_from_direct_wine_neutral_source(self) -> None:
         self.capsule["profiles"] = [
@@ -594,7 +742,6 @@ class ExperimentalVariantTests(unittest.TestCase):
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
             destination=destination,
-            backend_template_id="umu-template/linux-umu",
         )
 
         self.assertTrue(result.materialized)
@@ -602,12 +749,57 @@ class ExperimentalVariantTests(unittest.TestCase):
             (destination / "engine/proton/ge-proton/proton").is_file()
         )
 
+    def test_umu_runtime_catalog_rejects_game_specific_backend_object(self) -> None:
+        self._add_umu_backend()
+        template_path = (
+            self.collection / "02_CAPSULES/umu-template/capsule.json"
+        )
+        document = json.loads(template_path.read_text(encoding="utf-8"))
+        document["objects"][0]["shared"] = False
+        template_path.write_text(json.dumps(document), encoding="utf-8")
+
+        self.assertEqual(
+            list_shared_umu_runtimes(self.collection),
+            (),
+        )
+        with self.assertRaisesRegex(
+            ExperimentalVariantError,
+            "no complete matching shared runtime",
+        ):
+            materialize_experimental_umu(
+                collection_root=self.collection,
+                capsule_path=self.capsule_path,
+                runner_id="ge-proton",
+                destination=self.root / "umu-rejected",
+            )
+
+    def test_umu_runner_rejects_a_complete_but_wrong_runtime_family(self) -> None:
+        self._add_umu_backend(
+            family="steamrt3",
+            platform_prefix="sniper",
+        )
+        runtimes = list_shared_umu_runtimes(self.collection)
+        self.assertEqual(len(runtimes), 1)
+        self.assertEqual(runtimes[0].runtime_family, "steamrt3")
+        with self.assertRaisesRegex(
+            ExperimentalVariantError,
+            r"requires steamrt4 .*no complete matching shared runtime",
+        ):
+            materialize_experimental_umu(
+                collection_root=self.collection,
+                capsule_path=self.capsule_path,
+                runner_id="ge-proton",
+                destination=self.root / "umu-wrong-family",
+            )
+
     def test_umu_materializes_from_preserved_backend_and_proton(self) -> None:
         self._add_umu_backend()
-        templates = list_umu_templates(self.collection)
+        runtimes = list_shared_umu_runtimes(self.collection)
+        self.assertEqual(len(runtimes), 1)
+        self.assertTrue(runtimes[0].runtime_id.startswith("umu-runtime-"))
         self.assertEqual(
-            [item.template_id for item in templates],
-            ["umu-template/linux-umu"],
+            runtimes[0].runtime_var,
+            "engine/xdg-data/umu/steamrt4/var",
         )
 
         destination = self.root / "umu"
@@ -616,11 +808,14 @@ class ExperimentalVariantTests(unittest.TestCase):
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
             destination=destination,
-            backend_template_id="umu-template/linux-umu",
         )
 
         self.assertTrue(result.materialized)
         self.assertFalse(result.acceptance_inherited)
+        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
+            path = destination / name
+            self.assertTrue(path.is_file())
+            self.assertTrue(path.stat().st_mode & 0o100)
         self.assertTrue(
             (destination / "engine/proton/ge-proton/proton").is_file()
         )

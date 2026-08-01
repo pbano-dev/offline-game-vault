@@ -24,7 +24,268 @@ from . import __version__
 
 DEPLOYMENT_RECEIPT_NAME = ".ogv-bottles-deployment.json"
 DEFAULT_FLATPAK_APP = "com.usebottles.bottles"
+PORTABLE_RUNTIME_DESTINATION = "metadata/ogv_bottles_runtime.py"
+ROOT_LAUNCHER = "JUGAR.sh"
+ROOT_VERIFIER = "VERIFICAR.sh"
+ROOT_UNINSTALLER = "DESINSTALAR.sh"
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _flatpak_bottles_cli_command(
+    *arguments: str,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> list[str]:
+    if not isinstance(flatpak_app, str) or not flatpak_app:
+        raise BottlesAdapterError(
+            "Flatpak application ID must be a non-empty string."
+        )
+    return [
+        "flatpak",
+        "run",
+        "--unshare=network",
+        "--command=bottles-cli",
+        flatpak_app,
+        *arguments,
+    ]
+
+
+def _run_bottles_cli(
+    *arguments: str,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> subprocess.CompletedProcess[str]:
+    command = _flatpak_bottles_cli_command(
+        *arguments,
+        flatpak_app=flatpak_app,
+    )
+    try:
+        return subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise BottlesAdapterError(
+            "flatpak executable was not found."
+        ) from exc
+    except OSError as exc:
+        raise BottlesAdapterError(
+            f"Cannot invoke Bottles CLI: {exc}"
+        ) from exc
+
+
+def _json_documents_from_output(output: str) -> list[Any]:
+    documents: list[Any] = []
+    cleaned = _ANSI_ESCAPE.sub("", output)
+    candidates = [cleaned.strip()]
+    candidates.extend(
+        line.strip()
+        for line in cleaned.splitlines()
+        if line.strip().startswith(("{", "[", '"'))
+    )
+    seen: set[str] = set()
+    for candidate in reversed(candidates):
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            documents.append(json.loads(candidate))
+        except json.JSONDecodeError:
+            continue
+    return documents
+
+
+def _walk_text_values(value: Any) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _walk_text_values(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_text_values(item)
+
+
+def _absolute_path_candidates(output: str) -> tuple[Path, ...]:
+    raw_values: list[str] = []
+    for document in _json_documents_from_output(output):
+        raw_values.extend(_walk_text_values(document))
+
+    cleaned = _ANSI_ESCAPE.sub("", output)
+    raw_values.extend(line.strip() for line in cleaned.splitlines())
+
+    candidates: list[Path] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        value = raw.strip().strip("'\"")
+        if value.startswith("file://"):
+            value = value[7:]
+        if not value.startswith("/"):
+            continue
+        path = Path(value)
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(path)
+    return tuple(candidates)
+
+
+def discover_bottles_path(
+    *,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> Path:
+    """Return the effective directory managed by the active Bottles Flatpak.
+
+    The query is always run without network access.  JSON output is preferred,
+    with a plain-text retry for Bottles versions that do not serialize this
+    particular ``info`` command.
+    """
+
+    attempts = (
+        ("--json", "info", "bottles-path"),
+        ("info", "bottles-path"),
+    )
+    diagnostics: list[str] = []
+    for arguments in attempts:
+        process = _run_bottles_cli(
+            *arguments,
+            flatpak_app=flatpak_app,
+        )
+        if process.returncode != 0:
+            detail = process.stderr.strip() or process.stdout.strip()
+            diagnostics.append(
+                f"{' '.join(arguments)} exited with {process.returncode}"
+                + (f": {detail[-1000:]}" if detail else "")
+            )
+            continue
+
+        valid: list[Path] = []
+        for candidate in _absolute_path_candidates(process.stdout):
+            try:
+                if candidate.is_symlink():
+                    continue
+                resolved = candidate.expanduser().resolve(strict=True)
+            except OSError:
+                continue
+            if resolved.is_dir() and resolved not in valid:
+                valid.append(resolved)
+
+        if len(valid) == 1:
+            return valid[0]
+        if len(valid) > 1:
+            raise BottlesAdapterError(
+                "Bottles CLI returned more than one existing absolute "
+                "directory for bottles-path."
+            )
+        diagnostics.append(
+            f"{' '.join(arguments)} returned no existing absolute directory"
+        )
+
+    raise BottlesAdapterError(
+        "Cannot discover the effective Bottles managed directory via "
+        "bottles-cli info bottles-path. "
+        + " | ".join(diagnostics)
+    )
+
+
+def require_bottles_managed_path(
+    requested: Path | None = None,
+    *,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> Path:
+    """Resolve Bottles' own managed path and reject arbitrary alternatives."""
+
+    discovered = discover_bottles_path(flatpak_app=flatpak_app)
+    if requested is None:
+        return discovered
+
+    expanded = requested.expanduser().absolute()
+    if expanded.is_symlink():
+        raise BottlesAdapterError(
+            "Requested Bottles path must not be a symlink."
+        )
+    try:
+        resolved = expanded.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise BottlesAdapterError(
+            "Requested Bottles path does not exist."
+        ) from exc
+    if resolved != discovered:
+        raise BottlesAdapterError(
+            "Requested Bottles path does not match the directory reported "
+            "by bottles-cli info bottles-path."
+        )
+    return discovered
+
+
+def _bottle_names_from_output(output: str) -> tuple[str, ...]:
+    names: set[str] = set()
+    for document in _json_documents_from_output(output):
+        if isinstance(document, dict):
+            raw = document.get("bottles")
+            if isinstance(raw, list):
+                names.update(
+                    item.strip()
+                    for item in raw
+                    if isinstance(item, str) and item.strip()
+                )
+        elif isinstance(document, list):
+            names.update(
+                item.strip()
+                for item in document
+                if isinstance(item, str) and item.strip()
+            )
+
+    cleaned = _ANSI_ESCAPE.sub("", output)
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            candidate = stripped[2:].strip()
+            if candidate:
+                names.add(candidate)
+    return tuple(sorted(names))
+
+
+def assert_bottle_registered(
+    bottle_name: str,
+    *,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> None:
+    """Require Bottles CLI to enumerate a newly published bottle."""
+
+    bottle_name = _validate_bottle_name(bottle_name)
+    attempts = (
+        ("--json", "list", "bottles"),
+        ("list", "bottles"),
+    )
+    diagnostics: list[str] = []
+    for arguments in attempts:
+        process = _run_bottles_cli(
+            *arguments,
+            flatpak_app=flatpak_app,
+        )
+        if process.returncode != 0:
+            diagnostics.append(
+                f"{' '.join(arguments)} exited with {process.returncode}"
+            )
+            continue
+        if bottle_name in _bottle_names_from_output(process.stdout):
+            return
+        diagnostics.append(
+            f"{' '.join(arguments)} did not enumerate {bottle_name!r}"
+        )
+
+    raise BottlesAdapterError(
+        "Bottles did not recognize the newly published bottle. "
+        + " | ".join(diagnostics)
+    )
 
 
 class BottlesAdapterError(Exception):
@@ -67,6 +328,7 @@ class BottlesDeploymentVerification:
     receipt_valid: bool
     configuration_valid: bool
     entrypoint_present: bool
+    operational_scripts_valid: bool
     verified: bool
 
     def to_dict(self) -> dict[str, Any]:
@@ -736,6 +998,88 @@ def _release_lock(lock: Path, descriptor: int) -> None:
             pass
 
 
+def _portable_bottles_runtime_source() -> str:
+    from . import portable_bottles_runtime
+
+    path = Path(portable_bottles_runtime.__file__).resolve()
+    if path.is_symlink() or not path.is_file():
+        raise BottlesAdapterError(
+            "Cannot locate the portable Bottles runtime source."
+        )
+    return path.read_text(encoding="utf-8")
+
+
+def _operational_script(command: str) -> str:
+    if command not in {"play", "verify", "uninstall"}:
+        raise BottlesAdapterError("Unsupported operational script command.")
+    return f"""#!/usr/bin/env bash
+set -Eeuo pipefail
+root="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd -P)"
+exec "${{PYTHON:-python3}}" \
+  "$root/{PORTABLE_RUNTIME_DESTINATION}" \
+  {command} --root "$root" "$@"
+"""
+
+
+def _write_operational_file(path: Path, payload: str, mode: int) -> None:
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    if path.exists() or path.is_symlink():
+        raise BottlesAdapterError(
+            f"Operational path already exists in staged bottle: {path.name}"
+        )
+    try:
+        path.write_text(payload, encoding="utf-8", newline="\n")
+        path.chmod(mode)
+    except OSError as exc:
+        raise BottlesAdapterError(
+            f"Cannot write operational file {path.name}: {exc}"
+        ) from exc
+
+
+def _install_operational_scripts(staging: Path) -> dict[str, str]:
+    runtime = staging / PORTABLE_RUNTIME_DESTINATION
+    launcher = staging / ROOT_LAUNCHER
+    verifier = staging / ROOT_VERIFIER
+    uninstaller = staging / ROOT_UNINSTALLER
+    _write_operational_file(
+        runtime,
+        _portable_bottles_runtime_source(),
+        0o600,
+    )
+    compile(runtime.read_text(encoding="utf-8"), str(runtime), "exec")
+    _write_operational_file(
+        launcher, _operational_script("play"), 0o700
+    )
+    _write_operational_file(
+        verifier, _operational_script("verify"), 0o700
+    )
+    _write_operational_file(
+        uninstaller, _operational_script("uninstall"), 0o700
+    )
+    if shutil.which("bash") is not None:
+        for script in (launcher, verifier, uninstaller):
+            process = subprocess.run(
+                ["bash", "-n", str(script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if (
+                isinstance(process.returncode, int)
+                and process.returncode != 0
+            ):
+                raise BottlesAdapterError(
+                    f"Generated shell script is invalid: {script.name}"
+                )
+    return {
+        "launcher": ROOT_LAUNCHER,
+        "verifier": ROOT_VERIFIER,
+        "uninstaller": ROOT_UNINSTALLER,
+        "portable_runtime": PORTABLE_RUNTIME_DESTINATION,
+    }
+
+
 def _write_deployment_receipt(
     *,
     staging: Path,
@@ -781,11 +1125,8 @@ def deploy_bottles_profile(
         materialization,
         "Materialization",
     )
-    bottles_path = _canonical_existing_directory(
-        bottles_path,
-        "Bottles managed path",
-    )
     bottle_name = _validate_bottle_name(bottle_name)
+    bottles_path = require_bottles_managed_path(bottles_path)
 
     if not os.access(bottles_path, os.W_OK):
         raise BottlesAdapterError(
@@ -872,6 +1213,7 @@ def deploy_bottles_profile(
         f"{os.getpid()}-{secrets.token_hex(8)}"
     )
     promoted = False
+    published = False
 
     try:
         if target.exists() or target.is_symlink():
@@ -938,6 +1280,8 @@ def deploy_bottles_profile(
                 }
             )
 
+        operational_paths = _install_operational_scripts(staging)
+
         deployment_id = str(uuid.uuid4())
         receipt = {
             "schema": 0,
@@ -958,6 +1302,7 @@ def deploy_bottles_profile(
                 "arguments": list(arguments),
                 "network": network,
             },
+            "operational_paths": operational_paths,
             "source_tree_sha256": source_summary.digest,
             "deployed_tree_sha256": deployed_summary.digest,
             "persistent_state": receipt_state,
@@ -976,6 +1321,8 @@ def deploy_bottles_profile(
         )
         _fsync_tree(staging)
         _rename_noreplace(staging, target)
+        published = True
+        assert_bottle_registered(bottle_name)
         promoted = True
 
         return BottlesDeploymentResult(
@@ -997,8 +1344,11 @@ def deploy_bottles_profile(
             complete=True,
         )
     finally:
-        if not promoted and staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
+        if not promoted:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+            if published and target.exists() and not target.is_symlink():
+                shutil.rmtree(target, ignore_errors=True)
         _release_lock(lock, descriptor)
 
 
@@ -1007,11 +1357,8 @@ def _deployment_target(
     bottles_path: Path,
     bottle_name: str,
 ) -> tuple[Path, str]:
-    bottles_path = _canonical_existing_directory(
-        bottles_path,
-        "Bottles managed path",
-    )
     bottle_name = _validate_bottle_name(bottle_name)
+    bottles_path = require_bottles_managed_path(bottles_path)
     target = bottles_path / bottle_name
 
     if target.is_symlink():
@@ -1129,7 +1476,31 @@ def verify_bottles_deployment(
         not entrypoint.is_symlink() and entrypoint.is_file()
     )
 
-    verified = configuration_valid and entrypoint_present
+    operational = receipt.get("operational_paths")
+    operational_scripts_valid = isinstance(operational, dict)
+    if operational_scripts_valid:
+        for key in ("launcher", "verifier", "uninstaller", "portable_runtime"):
+            value = operational.get(key)
+            try:
+                relative = _safe_relative_path(
+                    value, f"deployment.operational_paths.{key}"
+                )
+            except BottlesAdapterError:
+                operational_scripts_valid = False
+                break
+            path = target.joinpath(*relative.parts)
+            if path.is_symlink() or not path.is_file():
+                operational_scripts_valid = False
+                break
+            if key != "portable_runtime" and not os.access(path, os.X_OK):
+                operational_scripts_valid = False
+                break
+
+    verified = (
+        configuration_valid
+        and entrypoint_present
+        and operational_scripts_valid
+    )
     return BottlesDeploymentVerification(
         schema=0,
         deployment_id=receipt["deployment_id"],
@@ -1142,6 +1513,7 @@ def verify_bottles_deployment(
         receipt_valid=True,
         configuration_valid=configuration_valid,
         entrypoint_present=entrypoint_present,
+        operational_scripts_valid=operational_scripts_valid,
         verified=verified,
     )
 
@@ -1269,10 +1641,6 @@ def remove_bottles_deployment(
 ) -> BottlesRemovalResult:
     """Atomically detach and remove one recognized mutable deployment."""
 
-    bottles_path = _canonical_existing_directory(
-        bottles_path,
-        "Bottles managed path",
-    )
     target, bottle_name = _deployment_target(
         bottles_path=bottles_path,
         bottle_name=bottle_name,

@@ -18,6 +18,7 @@ except ImportError:
 from offline_game_vault.storage import canonical_object_path, ingest_object
 from offline_game_vault.umu_adapter import (
     UmuAdapterError,
+    _discover_offline_environment,
     materialize_umu_profile,
     run_umu_materialization,
     verify_umu_materialization,
@@ -65,6 +66,28 @@ class UmuOfflineDependencyTests(unittest.TestCase):
         (self.capsule_root / "launchers").mkdir()
         (self.capsule_root / "manifests").mkdir()
         self.destination = self.root / "materialized"
+        self.original_path = os.environ.get("PATH", "")
+        test_bin = self.root / "bin"
+        test_bin.mkdir()
+        systemd_run = test_bin / "systemd-run"
+        self.systemd_log = self.root / "systemd-run.args"
+        os.environ["OGV_TEST_SYSTEMD_RUN_LOG"] = str(self.systemd_log)
+        systemd_run.write_text(
+            "#!/bin/sh\n"
+            "set -eu\n"
+            "printf '%s\\n' \"$@\" > \"$OGV_TEST_SYSTEMD_RUN_LOG\"\n"
+            "while [ \"$#\" -gt 0 ]; do\n"
+            "  if [ \"$1\" = \"--\" ]; then\n"
+            "    shift\n"
+            "    exec \"$@\"\n"
+            "  fi\n"
+            "  shift\n"
+            "done\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        systemd_run.chmod(0o755)
+        os.environ["PATH"] = str(test_bin) + os.pathsep + self.original_path
 
         game_archive = self.root / "game.tar"
         with tarfile.open(game_archive, "w") as archive:
@@ -81,6 +104,12 @@ class UmuOfflineDependencyTests(unittest.TestCase):
         with tarfile.open(runtime_archive, "w") as archive:
             add_directory(archive, "steamrt4")
             add_file(archive, "steamrt4/VERSIONS.txt", b"steamrt4\t1\n")
+            add_file(
+                archive,
+                "steamrt4/_v2-entry-point",
+                b"#!/bin/sh\nexit 0\n",
+                0o755,
+            )
             add_directory(archive, "steamrt4/pressure-vessel")
             add_directory(archive, "steamrt4/steamrt4_platform_test")
             add_directory(
@@ -322,6 +351,10 @@ class UmuOfflineDependencyTests(unittest.TestCase):
                                         "type": "file",
                                     },
                                     {
+                                        "path": "_v2-entry-point",
+                                        "type": "file",
+                                    },
+                                    {
                                         "path": "pressure-vessel",
                                         "type": "directory",
                                     },
@@ -362,6 +395,8 @@ class UmuOfflineDependencyTests(unittest.TestCase):
         self.capsule = capsule
 
     def tearDown(self) -> None:
+        os.environ["PATH"] = self.original_path
+        os.environ.pop("OGV_TEST_SYSTEMD_RUN_LOG", None)
         self.temporary.cleanup()
 
     @unittest.skipIf(
@@ -388,6 +423,10 @@ class UmuOfflineDependencyTests(unittest.TestCase):
             destination=self.destination,
         )
         self.assertTrue(result.complete)
+        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
+            path = self.destination / name
+            self.assertTrue(path.is_file())
+            self.assertTrue(os.access(path, os.X_OK))
 
         runtime = (
             self.destination
@@ -414,6 +453,15 @@ class UmuOfflineDependencyTests(unittest.TestCase):
             destination=self.destination
         )
         self.assertTrue(played.complete)
+        systemd_arguments = self.systemd_log.read_text(
+            encoding="utf-8"
+        ).splitlines()
+        self.assertIn("--property=PrivateNetwork=yes", systemd_arguments)
+        self.assertIn(
+            "--property=RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6",
+            systemd_arguments,
+        )
+        self.assertIn("--setenv=UMU_RUNTIME_UPDATE=0", systemd_arguments)
 
         environment = (
             self.destination
@@ -451,6 +499,25 @@ class UmuOfflineDependencyTests(unittest.TestCase):
             verify_umu_materialization(
                 destination=self.destination
             )
+
+
+    def test_incomplete_preserved_runtime_is_rejected_before_launch(self) -> None:
+        incomplete = self.root / "incomplete-materialization"
+        runtime = incomplete / "engine/xdg-data/umu/steamrt4"
+        (runtime / "pressure-vessel").mkdir(parents=True)
+        (runtime / "VERSIONS.txt").write_text(
+            "steamrt4\ttest\n",
+            encoding="utf-8",
+        )
+        entrypoint = runtime / "_v2-entry-point"
+        entrypoint.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        entrypoint.chmod(0o755)
+
+        with self.assertRaisesRegex(
+            UmuAdapterError,
+            "steamrt4_platform_",
+        ):
+            _discover_offline_environment(incomplete)
 
 
 if __name__ == "__main__":
