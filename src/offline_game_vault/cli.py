@@ -1265,25 +1265,48 @@ def _command_list_preserved_runners(args: argparse.Namespace) -> int:
     return 0
 
 
-def _command_list_shared_umu_runtimes(args: argparse.Namespace) -> int:
-    runtimes = list_shared_umu_runtimes(args.collection_root)
+def _command_list_shared_umu_runtimes(
+    args: argparse.Namespace,
+) -> int:
+    component_sets = list_shared_umu_runtimes(
+        args.collection_root
+    )
+
     document = {
         "schema": 0,
-        "runtimes": [
+        "component_sets": [
             {
-                "runtime_id": item.runtime_id,
-                "digest": "sha256:" + item.digest,
-                "composite_object_id": item.composite_object_id,
+                "component_set_id": (
+                    item.component_set_id
+                ),
+                "component_set_digest": (
+                    "sha256:"
+                    + item.component_set_digest
+                ),
+                "backend_component_id": (
+                    item.backend_object_id
+                ),
+                "runtime_component_id": (
+                    item.runtime_object_id
+                ),
+                "backend_entrypoint": (
+                    item.backend_entrypoint
+                ),
                 "runtime_var": item.runtime_var,
-                "runtime_family": item.runtime_family,
-                "platform_prefix": item.platform_prefix,
-                "platform_directory": item.platform_directory,
-                "source_capsule_id": item.source_capsule_id,
-                "source_profile_id": item.source_profile_id,
+                "runtime_family": (
+                    item.runtime_family
+                ),
+                "platform_prefix": (
+                    item.platform_prefix
+                ),
+                "platform_directory": (
+                    item.platform_directory
+                ),
             }
-            for item in runtimes
+            for item in component_sets
         ],
     }
+
     if args.json:
         print(
             json.dumps(
@@ -1294,16 +1317,17 @@ def _command_list_shared_umu_runtimes(args: argparse.Namespace) -> int:
             )
         )
     else:
-        for item in runtimes:
+        for item in component_sets:
             print(
-                f"{item.runtime_id}: digest={item.digest}, "
-                f"runtime_var={item.runtime_var}"
+                f"{item.component_set_id}: "
+                f"backend={item.backend_object_id}; "
+                f"runtime={item.runtime_object_id}; "
+                f"family={item.runtime_family}; "
+                f"entrypoint="
+                f"{item.backend_entrypoint}"
             )
+
     return 0
-
-
-
-
 def _command_discover_bottles_path(args: argparse.Namespace) -> int:
     path = discover_bottles_path(flatpak_app=args.flatpak_app)
     document = {
@@ -1393,7 +1417,6 @@ def _command_compose(args: argparse.Namespace) -> int:
                 "Play complete: "
                 + ("yes" if result.play_complete else "NO")
             )
-        print("Acceptance inherited: no")
     return 0 if result.play_complete is not False else 1
 
 
@@ -2320,7 +2343,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--backend",
         choices=("bottles", "direct-wine", "umu"),
         required=True,
-        help="Requested backend. Acceptance status does not restrict selection.",
+        help="Requested backend assembled from technically compatible preserved components.",
     )
     composition_parser.add_argument(
         "--runner",

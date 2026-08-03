@@ -97,6 +97,11 @@ ogv list-shared-umu-runtimes \
   --json
 ```
 
+The diagnostic JSON uses a `component_sets` array. Each item records the
+independently verified backend component, Steam Linux Runtime component,
+deterministic UMU entrypoint, runtime family, and content-derived
+`component_set_id`.
+
 The selected Proton remains a separate preserved runner object.
 
 ## Destination-local staging

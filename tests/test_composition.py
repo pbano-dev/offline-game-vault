@@ -805,17 +805,62 @@ class CompositionTests(unittest.TestCase):
                 destination=self.root / "umu-wrong-family",
             )
 
-    def test_umu_materializes_from_preserved_backend_and_proton(self) -> None:
+    def test_umu_materializes_from_preserved_backend_and_proton(
+        self,
+    ) -> None:
         self._add_umu_backend()
-        runtimes = list_shared_umu_runtimes(self.collection)
-        self.assertEqual(len(runtimes), 1)
-        self.assertTrue(runtimes[0].runtime_id.startswith("umu-runtime-"))
+
+        component_sets = list_shared_umu_runtimes(
+            self.collection
+        )
+
         self.assertEqual(
-            runtimes[0].runtime_var,
+            len(component_sets),
+            1,
+        )
+
+        component_set = component_sets[0]
+
+        self.assertTrue(
+            component_set.component_set_id.startswith(
+                "umu-component-set-"
+            )
+        )
+
+        self.assertEqual(
+            component_set.backend_object_id,
+            "umu-backend",
+        )
+
+        self.assertEqual(
+            component_set.runtime_object_id,
+            "steamrt4-runtime",
+        )
+
+        self.assertEqual(
+            component_set.backend_entrypoint,
+            (
+                "engine/python-portable/"
+                "umu-run-fully-local"
+            ),
+        )
+
+        self.assertEqual(
+            component_set.backend_entrypoint_arguments,
+            (),
+        )
+
+        self.assertIsNone(
+            component_set.backend_pythonpath
+        )
+
+        self.assertEqual(
+            component_set.runtime_var,
             "engine/xdg-data/umu/steamrt4/var",
         )
 
         destination = self.root / "umu"
+
         result = compose_umu(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
@@ -823,27 +868,135 @@ class CompositionTests(unittest.TestCase):
             destination=destination,
         )
 
-        self.assertTrue(result.materialized)
-        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
-            path = destination / name
-            self.assertTrue(path.is_file())
-            self.assertTrue(path.stat().st_mode & 0o100)
         self.assertTrue(
-            (destination / "engine/proton/ge-proton/proton").is_file()
+            result.materialized
         )
+
+        for name in (
+            "JUGAR.sh",
+            "VERIFICAR.sh",
+            "DESINSTALAR.sh",
+        ):
+            path = destination / name
+
+            self.assertTrue(
+                path.is_file()
+            )
+
+            self.assertTrue(
+                path.stat().st_mode & 0o100
+            )
+
         self.assertTrue(
             (
                 destination
-                / "launchers/JUGAR_UMU.sh"
+                / "engine"
+                / "proton"
+                / "ge-proton"
+                / "proton"
             ).is_file()
         )
+
+        launcher = (
+            destination
+            / "launchers"
+            / "JUGAR_UMU.sh"
+        )
+
+        self.assertTrue(
+            launcher.is_file()
+        )
+
+        launcher_text = launcher.read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            (
+                'UMU_ENTRYPOINT="$ROOT/'
+                'engine/python-portable/'
+                'umu-run-fully-local"'
+            ),
+            launcher_text,
+        )
+
+        self.assertNotIn(
+            "find ",
+            launcher_text,
+        )
+
+        self.assertNotIn(
+            "composition composition",
+            launcher_text,
+        )
+
+        launched = subprocess.run(
+            [
+                str(launcher),
+            ],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            launched.returncode,
+            0,
+            launched.stderr,
+        )
+
+        backend_result = result.backend_result
+
+        self.assertEqual(
+            backend_result[
+                "component_set_id"
+            ],
+            component_set.component_set_id,
+        )
+
+        self.assertEqual(
+            backend_result[
+                "backend_component_id"
+            ],
+            "umu-backend",
+        )
+
+        self.assertEqual(
+            backend_result[
+                "runtime_component_id"
+            ],
+            "steamrt4-runtime",
+        )
+
+        self.assertEqual(
+            backend_result[
+                "backend_entrypoint"
+            ],
+            (
+                "engine/python-portable/"
+                "umu-run-fully-local"
+            ),
+        )
+
+        self.assertNotIn(
+            "shared_runtime_id",
+            backend_result,
+        )
+
         receipt = json.loads(
-            (destination / "umu-materialization.json").read_text(
+            (
+                destination
+                / "umu-materialization.json"
+            ).read_text(
                 encoding="utf-8"
             )
         )
-        self.assertNotIn("composition_composition", receipt)
 
-
+        self.assertNotIn(
+            "composition_composition",
+            receipt,
+        )
 if __name__ == "__main__":
     unittest.main()

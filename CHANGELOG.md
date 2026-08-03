@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.4 — 2026-08-03
+### Fixed
+
+- UMU discovery selects one deterministic preserved backend entrypoint and
+  records it in the resolved component set.
+- Generated UMU launchers execute that exact path instead of searching the
+  materialized tree again.
+- Diagnostic JSON and composition results expose backend, Steam Runtime, and
+  `component_set_id` provenance without obsolete runtime or acceptance fields.
+- Regression tests execute `JUGAR_UMU.sh` and both diagnostic output modes.
+
 ## 0.11.3 — 2026-08-01
 
 ### Fixed
