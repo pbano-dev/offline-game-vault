@@ -522,7 +522,7 @@ class CompositionTests(unittest.TestCase):
         ):
             scan_runners(self.collection)
 
-    def test_direct_wine_materializes_even_when_source_is_unavailable(self) -> None:
+    def test_direct_wine_materializes_from_neutral_source(self) -> None:
         destination = self.root / "direct-wine"
         result = compose_wine(
             collection_root=self.collection,

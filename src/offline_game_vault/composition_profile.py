@@ -548,8 +548,6 @@ def build_derived_capsule(
             "environment": launch.get("environment", {}),
             "network": direct_wine_network,
         })
-        derived_profile.pop("status", None)
-        derived_profile.pop("acceptance_report", None)
         derived_profile["notes"] = (
             f"Direct-Wine profile composed by Offline Game Vault core "
             f"{__version__} from a neutral object and runner "
@@ -702,8 +700,6 @@ def build_derived_capsule(
     derived_mappings[0]["destination"] = destination
 
     derived_paths.update(expected_paths)
-    derived_profile.pop("status", None)
-    derived_profile.pop("acceptance_report", None)
     derived_profile["notes"] = (
         f"Profile composed by Offline Game Vault core {__version__} "
         f"from {profile_id!r}: original runner {current_id!r}, "
