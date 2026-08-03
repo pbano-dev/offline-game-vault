@@ -108,7 +108,7 @@ publish private collection evidence or transfer acceptance to another game.
 
 `verify-umu` reports protected-file, symlink, and `hardlink_group_count` values. The topology counts are part of the verification evidence.
 
-## Shared runtime selection for experimental variants
+## Shared runtime selection for composition compositions
 
 A Proton runner is paired with the Steam Linux Runtime named by the archived
 runner's `toolmanifest.vdf` `require_tool_appid`; runtime generation is not

@@ -408,7 +408,7 @@ exit 0
             ).read_text(encoding="utf-8")
         )
         self.assertNotIn("profile_status", receipt)
-        self.assertNotIn("experimental_variant", receipt)
+        self.assertNotIn("composition_composition", receipt)
 
     def test_materializes_restores_and_validates_receipt(self) -> None:
         result = self._materialize()

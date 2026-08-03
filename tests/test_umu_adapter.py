@@ -286,7 +286,6 @@ class UmuAdapterTests(unittest.TestCase):
                     "id": "linux-umu",
                     "platform": "linux",
                     "adapter": "umu",
-                    "status": "verified",
                     "dependencies": ["game", "umu-stack"],
                     "host_contract": "host.json",
                     "launch": {

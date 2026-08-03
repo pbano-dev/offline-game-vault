@@ -666,7 +666,6 @@ def validate_neutral_bottles_source(
 
     return {
         "schema": 0,
-        "status": "verified",
         "source_object": source_object,
         "object_root": f"objects/{source_object}",
         "entrypoint": entrypoint.as_posix(),

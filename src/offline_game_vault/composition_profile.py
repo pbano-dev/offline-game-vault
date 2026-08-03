@@ -301,7 +301,7 @@ def _normalized_direct_wine_contract(
             "baseline_state": neutral.get(
                 "baseline_state", "embedded-or-unknown"
             ),
-            "runner_binding": "selected-experimental",
+            "runner_binding": "selected-composition",
             "preferred_runner": None,
             "runtime_directory": str(
                 neutral.get("runtime_directory", "runtime")
@@ -322,7 +322,7 @@ def _normalized_direct_wine_contract(
         }
     )
     payload = _canonical_bytes(document)
-    relative = "host-contracts/experimental-direct-wine-source.json"
+    relative = "host-contracts/composition-direct-wine-source.json"
     return OverlayFile(
         relative_path=relative,
         payload=payload,

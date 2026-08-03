@@ -120,14 +120,14 @@ The UMU suite additionally verifies:
 The test suite uses synthetic objects. Commercial game data, private state, and
 proprietary runtime files are not present in Git.
 
-## Experimental-variant validation in 0.11.0–0.11.2
+## Composition-composition validation in 0.11.0–0.11.2
 
-The experimental suite additionally verifies:
+The composition suite additionally verifies:
 
 - profile status does not authorize or prohibit materialization;
-- an `unavailable` neutral source can produce an experimental Direct-Wine
-  variant;
-- Bottles, Direct-Wine, and UMU variants can be synthesized when the exact
+- an `unavailable` neutral source can produce an composition Direct-Wine
+  composition;
+- Bottles, Direct-Wine, and UMU compositions can be synthesized when the exact
   backend profile is absent but another compatible neutral Linux source exists;
 - preserved runner discovery checks canonical path, size, and SHA-256;
 - Proton is classified for Bottles, Direct-Wine, and UMU;

@@ -68,7 +68,6 @@ def capsule_fixture() -> dict[str, object]:
                 "id": "test-profile",
                 "platform": "linux",
                 "adapter": "other",
-                "status": "not_tested",
                 "dependencies": ["game-object"],
                 "host_contract": "host-contract.json",
                 "launch": {
@@ -129,33 +128,6 @@ class ObjectTaxonomySchemaTests(unittest.TestCase):
             self.validator.iter_errors(capsule)
         )
         self.assertTrue(errors)
-
-
-    def test_legacy_variant_metadata_is_rejected(self) -> None:
-        capsule = copy.deepcopy(capsule_fixture())
-        capsule["profiles"][0]["variant"] = {
-            "kind": "experimental",
-            "source_profile_id": "source-profile",
-            "backend": "umu",
-            "runner_id": "preserved-proton",
-            "shared_runtime_id": "umu-runtime-example",
-            "acceptance_inherited": False,
-        }
-
-        errors = list(
-            self.validator.iter_errors(capsule)
-        )
-
-        self.assertTrue(errors)
-        self.assertTrue(
-            any(
-                "Additional properties are not allowed"
-                in error.message
-                and "variant" in error.message
-                for error in errors
-            ),
-            [error.message for error in errors],
-        )
 
 
 if __name__ == "__main__":

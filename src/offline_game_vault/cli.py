@@ -22,12 +22,12 @@ from .bottles_adapter import (
     run_bottles_deployment,
     verify_bottles_deployment,
 )
-from .experimental import (
-    ExperimentalVariantError,
+from .composition import (
+    CompositionError,
     list_shared_umu_runtimes,
-    materialize_experimental_bottles,
-    materialize_experimental_umu,
-    materialize_experimental_wine,
+    compose_bottles,
+    compose_umu,
+    compose_wine,
 )
 from .preserved_runners import RunnerCatalogError, scan_runners
 from .inventory import (
@@ -1325,7 +1325,7 @@ def _command_discover_bottles_path(args: argparse.Namespace) -> int:
     return 0
 
 
-def _command_materialize_experimental(args: argparse.Namespace) -> int:
+def _command_compose(args: argparse.Namespace) -> int:
     common = {
         "collection_root": args.collection_root,
         "capsule_path": args.capsule,
@@ -1339,10 +1339,10 @@ def _command_materialize_experimental(args: argparse.Namespace) -> int:
 
     if args.backend == "direct-wine":
         if args.destination is None:
-            raise ExperimentalVariantError(
+            raise CompositionError(
                 "--destination is required for direct-wine."
             )
-        result = materialize_experimental_wine(
+        result = compose_wine(
             **common,
             destination=args.destination,
             state_backup=args.state_backup,
@@ -1350,22 +1350,22 @@ def _command_materialize_experimental(args: argparse.Namespace) -> int:
         )
     elif args.backend == "umu":
         if args.destination is None:
-            raise ExperimentalVariantError("--destination is required for UMU.")
-        result = materialize_experimental_umu(
+            raise CompositionError("--destination is required for UMU.")
+        result = compose_umu(
             **common,
             destination=args.destination,
             arguments=forwarded,
         )
     else:
         if not args.bottle_name:
-            raise ExperimentalVariantError(
+            raise CompositionError(
                 "--bottle-name is required for Bottles."
             )
         if forwarded:
-            raise ExperimentalVariantError(
+            raise CompositionError(
                 "Additional game arguments are not supported for Bottles."
             )
-        result = materialize_experimental_bottles(
+        result = compose_bottles(
             **common,
             bottles_path=args.bottles_path,
             bottle_name=args.bottle_name,
@@ -2297,54 +2297,54 @@ def build_parser() -> argparse.ArgumentParser:
         handler=_command_list_shared_umu_runtimes
     )
 
-    experimental_parser = commands.add_parser(
-        "materialize-experimental",
+    composition_parser = commands.add_parser(
+        "compose",
         help=(
             "Synthesize, materialize and optionally run a user-requested "
-            "variant using only preserved Vault objects."
+            "composition using only preserved Vault objects."
         ),
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--collection-root",
         type=Path,
         required=True,
         help="Offline Game Vault collection root.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--capsule",
         type=Path,
         required=True,
         help="Source capsule.json.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--backend",
         choices=("bottles", "direct-wine", "umu"),
         required=True,
         help="Requested backend. Acceptance status does not restrict selection.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--runner",
         required=True,
         help="Preserved runner ID from list-preserved-runners.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--source-profile",
         help=(
             "Optional source profile ID. Required only when more than one "
             "compatible source layout exists."
         ),
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--destination",
         type=Path,
         help="New destination for Direct-Wine or UMU.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--state-backup",
         type=Path,
         help="Verified state backup for Direct-Wine.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--bottles-path",
         type=Path,
         help=(
@@ -2353,26 +2353,26 @@ def build_parser() -> argparse.ArgumentParser:
             "a different value."
         ),
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--bottle-name",
         help="New Bottles derivative name.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--play",
         action="store_true",
         help="Launch after materialization.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
     )
-    experimental_parser.add_argument(
+    composition_parser.add_argument(
         "arguments",
         nargs=argparse.REMAINDER,
         help="Additional Direct-Wine or UMU game arguments after --.",
     )
-    experimental_parser.set_defaults(handler=_command_materialize_experimental)
+    composition_parser.set_defaults(handler=_command_compose)
 
     return parser
 
@@ -2394,7 +2394,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         UmuAdapterError,
         BottlesAdapterError,
         StateError,
-        ExperimentalVariantError,
+        CompositionError,
         RunnerCatalogError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)

@@ -1,6 +1,6 @@
-# Experimental materialization
+# Composition materialization
 
-Offline Game Vault can synthesize a private operational variant without
+Offline Game Vault can synthesize a private operational composition without
 rewriting the source capsule or claiming functional acceptance.
 
 Supported backends in this command family:
@@ -34,7 +34,7 @@ No network lookup, download, or system-runner fallback occurs.
 ## 2. Direct-Wine
 
 ```bash
-ogv materialize-experimental \
+ogv compose \
   --collection-root <VAULT> \
   --capsule <VAULT>/02_CAPSULES/<CAPSULE_ID>/capsule.json \
   --backend direct-wine \
@@ -50,7 +50,7 @@ A selected state backup may be supplied with `--state-backup`.
 ## 3. Bottles
 
 ```bash
-ogv materialize-experimental \
+ogv compose \
   --collection-root <VAULT> \
   --capsule <VAULT>/02_CAPSULES/<CAPSULE_ID>/capsule.json \
   --backend bottles \
@@ -73,7 +73,7 @@ enumerated by `bottles-cli` before success is reported.
 ## 4. UMU/Proton
 
 ```bash
-ogv materialize-experimental \
+ogv compose \
   --collection-root <VAULT> \
   --capsule <VAULT>/02_CAPSULES/<CAPSULE_ID>/capsule.json \
   --backend umu \
@@ -113,17 +113,17 @@ large game copies.
 
 ## 5. Status and receipts
 
-The source profile may be `verified`, `candidate`, `experimental`,
+The source profile may be `verified`, `candidate`, `composition`,
 `not_tested`, or `unavailable`. Status does not authorize the operation. When
 the exact backend profile is absent, the core selects a compatible neutral
 Linux source and synthesizes the requested backend profile. Use
 `--source-profile` only to override that deterministic selection or resolve an
 equally suitable ambiguity.
 
-Every synthesized variant records:
+Every synthesized composition records:
 
 ```text
-kind: experimental
+kind: composition
 acceptance_inherited: false
 source_profile_id
 backend
@@ -149,7 +149,7 @@ The implementation behind those scripts is backend-specific and copied into
 the derivative. Receipts remain descriptive evidence; the scripts are the
 operational entry points used by the GUI.
 
-UMU variants additionally require a complete preserved `steamrtN` tree with
+UMU compositions additionally require a complete preserved `steamrtN` tree with
 `VERSIONS.txt`, `_v2-entry-point`, `pressure-vessel`, and exactly one matching
 `steamrtN_platform_*` directory. Launch is isolated from the network and
 runtime downloads are never used as repair.

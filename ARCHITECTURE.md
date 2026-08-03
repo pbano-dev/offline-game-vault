@@ -161,7 +161,7 @@ Profile status is independent:
 ```text
 verified
 candidate
-experimental
+composition
 not_tested
 unavailable
 ```
@@ -177,8 +177,8 @@ silently.
 ### 6.1 Status is evidence, not permission
 
 Profile status and acceptance receipts describe known evidence. They do not
-authorize materialization. A user may request an experimental Bottles,
-Direct-Wine, or UMU variant even when the source profile is `candidate`,
+authorize materialization. A user may request an composition Bottles,
+Direct-Wine, or UMU composition even when the source profile is `candidate`,
 `not_tested`, `unavailable`, or does not already declare the exact
 backend/runner pair.
 
@@ -187,7 +187,7 @@ capsule unchanged, and records `acceptance_inherited: false`. The selectable
 runner must be a verified immutable Vault object. No network download or
 system-runner fallback is permitted.
 
-An experimental operation may still fail for a material reason: a missing or
+An composition operation may still fail for a material reason: a missing or
 corrupt object, unsafe topology, incompatible runner, absent preserved UMU
 backend, ambiguous source layout, or unsafe destination.
 

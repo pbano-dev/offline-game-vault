@@ -1,4 +1,4 @@
-# ADR 0015 — User-requested experimental variants
+# ADR 0015 — User-requested composition compositions
 
 Status: **accepted and implemented**
 
@@ -11,19 +11,19 @@ tested. Treating `candidate`, `not_tested`, `unavailable`, or the absence of an
 exact profile as authorization decisions prevents the user from materializing
 the very combination that needs to be tested.
 
-The Vault must remain offline and reproducible. Experimental freedom therefore
+The Vault must remain offline and reproducible. Composition freedom therefore
 cannot mean downloading a runner, using an unrecorded system Wine, or ignoring
 object integrity.
 
 ## Decision
 
-A user may request an experimental Linux variant for Bottles, Direct-Wine, or
+A user may request an composition Linux composition for Bottles, Direct-Wine, or
 UMU/Proton whenever the required preserved objects are technically available.
 
 Profile status and acceptance are descriptive:
 
 - they select recommendations and report evidence;
-- they never authorize or prohibit an experimental materialization;
+- they never authorize or prohibit an composition materialization;
 - no acceptance is inherited when backend, runner, runtime, or source profile
   changes.
 
@@ -34,7 +34,7 @@ published capsule. The resulting backend receipt records:
 - the selected backend;
 - the selected preserved runner;
 - an automatically resolved shared UMU runtime when applicable;
-- `kind: experimental`;
+- `kind: composition`;
 - `acceptance_inherited: false`.
 
 Only runners indexed as `shared-runner`, present in the immutable store, and
@@ -70,7 +70,7 @@ already declared exact backend/runner pair are not blocking conditions.
 ## Consequences
 
 - A successful materialization proves structural assembly, not gameplay.
-- A successful launch still does not transfer acceptance to another variant.
+- A successful launch still does not transfer acceptance to another composition.
 - Recommendations remain useful defaults but are always overridable.
 - Receipts become evidence of what was attempted rather than permission tokens.
 - Integrity and offline self-containment remain mandatory.

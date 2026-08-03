@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Bottles experimental materialization again uses the directory reported by
+- Bottles composition materialization again uses the directory reported by
   `bottles-cli info bottles-path` for every capsule. An optional
   `--bottles-path` value is only an assertion and cannot redirect deployment
   to an arbitrary directory.
@@ -55,7 +55,7 @@
 
 ### Fixed
 
-- Bottles experimental materialization now creates its heavy working tree
+- Bottles composition materialization now creates its heavy working tree
   inside the user-selected managed Bottles directory, not in the host `/tmp`.
 - Direct-Wine and UMU control overlays are also created beside the selected
   destination; backend materializers continue to stage and publish atomically
@@ -86,15 +86,15 @@ All notable project changes are documented here.
 
 ### Added
 
-- User-requested experimental materialization for Bottles, Direct-Wine, and
+- User-requested composition materialization for Bottles, Direct-Wine, and
   UMU/Proton.
 - Discovery and SHA-256 verification of preserved shared runners.
 - Synthesized operational profiles that leave source capsules unchanged,
   including backend profiles absent from the published capsule when another
   compatible neutral Linux source exists.
 - Preserved UMU backend-template discovery.
-- Optional materialize-and-play execution in the experimental command family.
-- Experimental-variant provenance in backend receipts.
+- Optional materialize-and-play execution in the composition command family.
+- Composition-composition provenance in backend receipts.
 - Vault-derived Bottles runner installation with full-tree reuse validation.
 
 ### Changed
@@ -102,14 +102,14 @@ All notable project changes are documented here.
 - Profile status and acceptance evidence are descriptive rather than
   authorization gates.
 - `unavailable`, `candidate`, and `not_tested` profiles may be used as source
-  evidence for a user-requested experimental variant.
+  evidence for a user-requested composition composition.
 - Bottles runner selection no longer falls back to an unverified local
   installation.
 - Project version advanced from `0.10.2` to `0.11.0`.
 
 ### Security
 
-- Experimental variants use only immutable objects already preserved in the
+- Composition compositions use only immutable objects already preserved in the
   Vault.
 - Runner objects are checked against their recorded size and SHA-256 before
   selection.

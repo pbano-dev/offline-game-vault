@@ -118,7 +118,6 @@ class MaterializerTests(unittest.TestCase):
                     "id": "linux-test",
                     "platform": "linux",
                     "adapter": "bottles",
-                    "status": "candidate",
                     "dependencies": ["game", "runner"],
                     "host_contract": "host-contract.json",
                     "launch": {

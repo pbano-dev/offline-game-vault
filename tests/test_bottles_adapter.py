@@ -165,7 +165,6 @@ class BottlesAdapterTests(unittest.TestCase):
                     "id": "linux-bottles",
                     "platform": "linux",
                     "adapter": "bottles",
-                    "status": "candidate",
                     "dependencies": [
                         "bottle-object",
                         "runner-object",

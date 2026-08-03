@@ -8,7 +8,7 @@ from pathlib import Path
 from offline_game_vault.cli import build_parser, main
 
 
-class ExperimentalCliTests(unittest.TestCase):
+class CompositionCliTests(unittest.TestCase):
     def test_commands_are_registered(self) -> None:
         parser = build_parser()
 
@@ -34,7 +34,7 @@ class ExperimentalCliTests(unittest.TestCase):
 
         materialize = parser.parse_args(
             [
-                "materialize-experimental",
+                "compose",
                 "--collection-root",
                 "vault",
                 "--capsule",
@@ -52,7 +52,7 @@ class ExperimentalCliTests(unittest.TestCase):
         )
         self.assertEqual(
             materialize.command,
-            "materialize-experimental",
+            "compose",
         )
         self.assertEqual(materialize.backend, "direct-wine")
         self.assertTrue(materialize.play)

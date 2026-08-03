@@ -324,11 +324,6 @@
         }
       ],
       "properties": {
-        "acceptance_report": {
-          "$ref": "#/$defs/relativePath",
-          "deprecated": true,
-          "description": "Legacy evidence reference accepted only during migration; ignored by the core."
-        },
         "adapter": {
           "enum": [
             "bottles",
@@ -399,17 +394,6 @@
         },
         "playable": {
           "$ref": "#/$defs/playable"
-        },
-        "status": {
-          "enum": [
-            "verified",
-            "candidate",
-            "experimental",
-            "not_tested",
-            "unavailable"
-          ],
-          "deprecated": true,
-          "description": "Legacy metadata accepted only during migration; ignored by the core."
         },
         "umu": {
           "$ref": "#/$defs/umuPlayable"
