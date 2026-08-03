@@ -98,6 +98,14 @@ At present, the generated composition sanitizer removes only Proton's known
 named path, a documented reason, and a regression test proving that unrelated
 archived data survives.
 
+### Pressure-vessel temporary roots use container link semantics
+
+Immediate `runtime_var/tmp-*` directories may contain symlinks whose targets
+are meaningful only inside pressure-vessel, including `/run/host` and
+container-absolute paths. The host-side broken-link check therefore excludes
+only those concrete temporary roots. Archive path safety remains mandatory,
+and broken symlinks elsewhere remain blocking.
+
 ### Published version identifiers must agree
 
 `pyproject.toml`, `offline_game_vault.__version__`, the leading changelog

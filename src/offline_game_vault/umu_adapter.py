@@ -788,6 +788,59 @@ def _verify_no_broken_symlinks(
             raise UmuAdapterError(f"Broken symlink: {relative}")
 
 
+def _runtime_context_unresolved_prefixes(
+    root: Path,
+    runtime_var_relative: PurePosixPath,
+) -> set[str]:
+    # Return concrete pressure-vessel temporary roots under runtime var.
+    runtime_var = _path_under(
+        root,
+        runtime_var_relative,
+    )
+
+    if (
+        runtime_var.is_symlink()
+        or not runtime_var.is_dir()
+    ):
+        raise UmuAdapterError(
+            "Runtime var is absent or linked."
+        )
+
+    try:
+        entries = sorted(
+            runtime_var.iterdir(),
+            key=lambda item: item.name,
+        )
+    except OSError as exc:
+        raise UmuAdapterError(
+            "Cannot inspect runtime var."
+        ) from exc
+
+    prefixes: set[str] = set()
+
+    for entry in entries:
+        if re.fullmatch(
+            r"tmp-[A-Za-z0-9._-]+",
+            entry.name,
+        ) is None:
+            continue
+
+        if (
+            entry.is_symlink()
+            or not entry.is_dir()
+        ):
+            raise UmuAdapterError(
+                "Runtime temporary entry is not a regular directory: "
+                f"{entry.name}"
+            )
+
+        prefixes.add(
+            entry.relative_to(root).as_posix()
+        )
+
+    return prefixes
+
+
 def _parse_hardlink_manifest(path: Path) -> list[list[str]]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -1964,12 +2017,28 @@ def materialize_umu_profile(
             staging,
             hardlink_receipts,
         )
+        paths_for_runtime_context = contract.get("paths")
+        if not isinstance(paths_for_runtime_context, dict):
+            raise UmuAdapterError("umu.paths must be an object.")
+        runtime_var_for_context = _safe_relative(
+            paths_for_runtime_context.get("runtime_var"),
+            "umu.paths.runtime_var",
+        )
+        runtime_context_prefixes = (
+            _runtime_context_unresolved_prefixes(
+                staging,
+                runtime_var_for_context,
+            )
+        )
         unresolved_prefixes = {
             prefix
             for item in symlink_receipts
             if item.get("allow_unresolved") is True
             for prefix in item["prefixes"]
         }
+        unresolved_prefixes.update(
+            runtime_context_prefixes
+        )
         _verify_no_broken_symlinks(
             staging,
             allowed_unresolved_prefixes=unresolved_prefixes,
@@ -2044,6 +2113,10 @@ def materialize_umu_profile(
                 "symlink_count": symlink_count,
                 "hardlink_group_count": hardlink_group_count,
                 "broken_symlinks": 0,
+                "broken_symlinks_outside_allowed_prefixes": 0,
+                "allowed_unresolved_symlink_prefixes": sorted(
+                    unresolved_prefixes
+                ),
                 "runtime_var_preserved": True,
                 "offline_environment_verified":
                     offline_environment is not None,
@@ -2132,12 +2205,25 @@ def verify_umu_materialization(
         destination,
         hardlink_manifests,
     )
+    runtime_var_for_context = _safe_relative(
+        paths.get("runtime_var"),
+        "receipt.paths.runtime_var",
+    )
+    runtime_context_prefixes = (
+        _runtime_context_unresolved_prefixes(
+            destination,
+            runtime_var_for_context,
+        )
+    )
     unresolved_prefixes = {
         prefix
         for item in symlink_manifests
         if item.get("allow_unresolved") is True
         for prefix in item["prefixes"]
     }
+    unresolved_prefixes.update(
+        runtime_context_prefixes
+    )
     _verify_no_broken_symlinks(
         destination,
         allowed_unresolved_prefixes=unresolved_prefixes,

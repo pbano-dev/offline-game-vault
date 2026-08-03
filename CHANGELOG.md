@@ -17,6 +17,7 @@
   independent acceptance evidence, deterministic UMU binding, and narrow
   sanitization.
 
+- Host-side symlink verification now treats only concrete pressure-vessel `runtime_var/tmp-*` roots as container-context paths; broken links elsewhere remain blocking.
 ## 0.11.3 — 2026-08-01
 
 ### Fixed

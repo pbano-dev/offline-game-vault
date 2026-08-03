@@ -97,6 +97,17 @@ restoration, network containment, save and content loading, normal shutdown,
 and post-run verification remain per-game tests recorded as independent
 evidence.
 
+## Pressure-vessel runtime-context symlinks
+
+Immediate `runtime_var/tmp-*` directories are pressure-vessel-generated
+container roots. Their symlinks can intentionally refer to `/run/host`,
+container-absolute paths, or mount topology that does not exist in the host
+namespace. The core preserves those links and excludes only those concrete
+temporary roots from host-side target-resolution checks.
+
+Archive path and link preflight remains mandatory. A broken symlink outside
+those concrete temporary roots remains a blocking integrity error.
+
 ## Public architecture and acceptance boundary
 
 The public backend contains no game-specific path, AppID, private identity, or
