@@ -18,7 +18,7 @@ capsule-driven direct-Wine materialization
 Bottles managed mutable deployment and execution
 generic persistent-state backup, verification, restoration, and rollback
 UMU/Proton materialization with exact archived dependencies
-user-requested composition compositions from preserved Vault pieces
+user-requested component compositions from preserved Vault pieces
 capsule operational audit
 ```
 
@@ -42,7 +42,7 @@ Start with:
 - `CHANGELOG.md`
 - `docs/validation.md`
 - `docs/UMU_BACKEND.md`
-- `docs/COMPOSITION_COMPOSITIONS.md`
+- `docs/COMPONENT_COMPOSITIONS.md`
 - `docs/DSR_UMU_REFERENCE.md`
 - `docs/NEXT_STEPS.md`
 
@@ -65,12 +65,12 @@ artifacts or protected files, not duplicated first-class objects.
 Success of one execution profile does not validate another profile, and success
 of one game does not transfer functional acceptance to a different game.
 
-## Composition compositions
+## Component compositions
 
-Acceptance evidence is descriptive, not an authorization mechanism. A user may
-request a Bottles, Direct-Wine, or UMU composition with any technically compatible
-runner preserved in the Vault. The core synthesizes an operational profile,
-records `acceptance_inherited: false`, and leaves the source capsule unchanged.
+Acceptance evidence is descriptive and does not authorize or prohibit a
+composition. A user may request a Bottles, Direct-Wine, or UMU composition with
+any technically compatible runner preserved in the Vault. The core synthesizes
+an operational profile and leaves the source capsule unchanged.
 
 The composition path never downloads components and never falls back to a
 system runner. Missing or corrupt objects, unsafe paths, incompatible runners,

@@ -2,7 +2,7 @@
 
 Status: **implemented generation-0 core with validated extensions**
 Schema generation: **0**
-Last updated: **2026-08-01**
+Last updated: **2026-08-03**
 
 ## 1. Purpose
 
@@ -146,50 +146,34 @@ Classification never changes a CAS path.
 ## 6. Capsules and profiles
 
 A capsule describes the preserved work and may contain several independent
-execution profiles:
+execution recipes, including Bottles, direct Wine, UMU/Proton, native Windows,
+or a historical virtual machine.
 
-```text
-Bottles on Linux
-direct Wine on Linux
-UMU/Proton on Linux
-native Windows
-historical virtual machine
-```
+Profiles are operational recipes and provenance records. They do not contain
+maturity, recommendation, or authorization state. Independent acceptance
+reports and receipts record what was actually tested for an exact game,
+component set, host contract, and date.
 
-Profile status is independent:
-
-```text
-verified
-candidate
-composition
-not_tested
-unavailable
-```
-
-A verified profile identifies an exact contract and exact object set.
-Modification of a protected object, runner, runtime, cache, sanitizer, or
-adapter invalidates the corresponding acceptance until retested.
-
-The original capsule and a derived playable profile are different records.
+The original capsule and a derived operational profile are different records.
 Derived work must retain provenance and must not replace the preserved original
 silently.
 
-### 6.1 Status is evidence, not permission
+### 6.1 Composition is requested assembly
 
-Profile status and acceptance receipts describe known evidence. They do not
-authorize materialization. A user may request an composition Bottles,
-Direct-Wine, or UMU composition even when the source profile is `candidate`,
-`not_tested`, `unavailable`, or does not already declare the exact
-backend/runner pair.
+A user may request a Bottles, Direct-Wine, or UMU composition whenever a
+technically compatible source recipe and the required preserved components are
+available.
 
 The core synthesizes a private operational profile, leaves the published
-capsule unchanged, and records `acceptance_inherited: false`. The selectable
-runner must be a verified immutable Vault object. No network download or
-system-runner fallback is permitted.
+capsule unchanged, and selects runners only from verified immutable Vault
+objects. No network download or system-runner fallback is permitted.
+Acceptance evidence is neither copied into the generated profile nor used as a
+permission gate.
 
-An composition operation may still fail for a material reason: a missing or
-corrupt object, unsafe topology, incompatible runner, absent preserved UMU
-backend, ambiguous source layout, or unsafe destination.
+A composition may still fail for a material reason: a missing or corrupt
+object, unsafe topology, incompatible runner, absent preserved UMU backend,
+missing Steam Linux Runtime family, ambiguous source layout, or unsafe
+destination.
 
 ## 7. Persistent and regenerable state
 

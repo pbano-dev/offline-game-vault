@@ -86,30 +86,31 @@ All notable project changes are documented here.
 
 ### Added
 
-- User-requested composition materialization for Bottles, Direct-Wine, and
+- User-requested component composition for Bottles, Direct-Wine, and
   UMU/Proton.
 - Discovery and SHA-256 verification of preserved shared runners.
 - Synthesized operational profiles that leave source capsules unchanged,
   including backend profiles absent from the published capsule when another
   compatible neutral Linux source exists.
-- Preserved UMU backend-template discovery.
+- Global discovery of preserved UMU/Python backend components.
 - Optional materialize-and-play execution in the composition command family.
-- Composition-composition provenance in backend receipts.
+- Composition provenance for the selected source, backend, runner, and
+  resolved runtime where applicable.
 - Vault-derived Bottles runner installation with full-tree reuse validation.
 
 ### Changed
 
-- Profile status and acceptance evidence are descriptive rather than
-  authorization gates.
-- `unavailable`, `candidate`, and `not_tested` profiles may be used as source
-  evidence for a user-requested composition composition.
+- Profiles are recipes and no longer contain maturity or
+  acceptance-reference fields.
+- Source selection is based on technical compatibility; acceptance evidence
+  remains independent and descriptive.
 - Bottles runner selection no longer falls back to an unverified local
   installation.
 - Project version advanced from `0.10.2` to `0.11.0`.
 
 ### Security
 
-- Composition compositions use only immutable objects already preserved in the
+- Component compositions use only immutable objects already preserved in the
   Vault.
 - Runner objects are checked against their recorded size and SHA-256 before
   selection.
@@ -122,8 +123,9 @@ All notable project changes are documented here.
 
 - Synthetic end-to-end materialization was exercised for Direct-Wine, Bottles,
   and UMU.
-- Tests cover an `unavailable` source profile, runner-object tampering,
-  preserved Bottles runner reuse, UMU backend composition, and CLI parsing.
+- Tests cover synthesis from a neutral source that does not already declare
+  the requested backend, runner-object tampering, preserved Bottles runner
+  reuse, UMU component composition, and CLI parsing.
 
 ## 0.10.2 — 2026-07-31
 

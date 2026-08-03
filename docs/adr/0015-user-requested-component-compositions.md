@@ -1,4 +1,4 @@
-# ADR 0015 — User-requested composition compositions
+# ADR 0015 — User-requested component compositions
 
 Status: **accepted and implemented**
 
@@ -6,10 +6,10 @@ Date: 2026-08-01
 
 ## Context
 
-Capsule profiles and acceptance receipts describe combinations that have been
-tested. Treating `candidate`, `not_tested`, `unavailable`, or the absence of an
-exact profile as authorization decisions prevents the user from materializing
-the very combination that needs to be tested.
+Capsule profiles are recipes and provenance records. Acceptance reports
+describe historical tests of exact combinations. Treating either as a
+permission system would prevent users from assembling a technically valid
+combination that still needs functional testing.
 
 The Vault must remain offline and reproducible. Composition freedom therefore
 cannot mean downloading a runner, using an unrecorded system Wine, or ignoring
@@ -17,25 +17,18 @@ object integrity.
 
 ## Decision
 
-A user may request an composition Linux composition for Bottles, Direct-Wine, or
-UMU/Proton whenever the required preserved objects are technically available.
+A user may request a Linux composition for Bottles, Direct-Wine, or UMU/Proton
+whenever the required preserved objects are technically available.
 
-Profile status and acceptance are descriptive:
-
-- they select recommendations and report evidence;
-- they never authorize or prohibit an composition materialization;
-- no acceptance is inherited when backend, runner, runtime, or source profile
-  changes.
+Profiles do not contain maturity or authorization fields. Acceptance reports
+remain independent evidence and do not authorize or prohibit a composition.
 
 The core synthesizes a private operational profile without modifying the
-published capsule. The resulting backend receipt records:
-
-- the source profile;
-- the selected backend;
-- the selected preserved runner;
-- an automatically resolved shared UMU runtime when applicable;
-- `kind: composition`;
-- `acceptance_inherited: false`.
+published capsule. It retains the selected source recipe and component
+provenance. For UMU, the generated host contract records the global UMU/Python
+backend component, Proton runner, Steam Linux Runtime component, and resolved
+component-set identifier. No acceptance result is copied into the generated
+profile.
 
 Only runners indexed as `shared-runner`, present in the immutable store, and
 verified by size and SHA-256 are selectable. No runner is downloaded and no
@@ -45,12 +38,13 @@ Bottles receives a runner extracted from the preserved Vault object. An
 existing Bottles runner directory is reusable only when it carries a matching
 OGV installation marker and its complete tree still matches that marker.
 
-UMU synthesis requires two preserved pieces:
+UMU composition requires three independently preserved pieces:
 
-1. a Proton runner;
-2. a reusable, content-addressed UMU/Python/Steam Linux Runtime object.
+1. a global UMU/Python backend component;
+2. a Proton runner;
+3. the exact Steam Linux Runtime family required by that runner.
 
-Windows-native synthesis is outside this decision.
+Windows-native composition is outside this decision.
 
 ## Permitted blocking conditions
 
@@ -59,18 +53,19 @@ The core may reject an operation for material reasons, including:
 - absent or hash-mismatched objects;
 - unsafe archives, paths, links, or destination topology;
 - a runner without the executables required by the selected backend;
-- a missing preserved UMU backend;
-- an ambiguous source layout or missing shared runtime;
+- a missing preserved UMU/Python backend;
+- a missing or incompatible Steam Linux Runtime family;
+- an ambiguous source layout;
 - an occupied or unsafe destination;
 - a failed backend verification.
 
-Lack of acceptance, `candidate`, `not_tested`, `unavailable`, or absence of an
-already declared exact backend/runner pair are not blocking conditions.
+Missing acceptance evidence or the absence of an already declared exact
+backend/runner recipe are not blocking conditions.
 
 ## Consequences
 
 - A successful materialization proves structural assembly, not gameplay.
-- A successful launch still does not transfer acceptance to another composition.
-- Recommendations remain useful defaults but are always overridable.
-- Receipts become evidence of what was attempted rather than permission tokens.
+- A successful launch does not transfer evidence to another component set.
+- Recommendations may remain useful defaults but are not permission tokens.
+- Receipts record what was attempted and what completed.
 - Integrity and offline self-containment remain mandatory.

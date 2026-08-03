@@ -7,8 +7,11 @@ UMU as direct Wine.
 
 - Immutable game objects contain game/media data and may contain a sealed,
   nested prefix baseline.
-- Shared UMU objects contain the preserved UMU launcher, Proton build, portable
-  Python, and Steam Linux Runtime.
+- Global UMU backend objects contain the preserved UMU launcher and portable
+  Python environment.
+- Proton builds are separate globally registered runner objects.
+- Steam Linux Runtime families are separate globally registered runtime
+  objects.
 - Operational launchers and sanitizers are capsule assets.
 - Required configuration and selectable saves are state archives.
 - Published materializations are writable derivatives outside the vault.
@@ -66,7 +69,7 @@ not itself create a backup.
 
 ## Preserved offline dependencies
 
-An UMU profile may declare `offline_environment` to bind a materialization to
+A UMU profile may declare `offline_environment` to bind a materialization to
 preserved local XDG data and cache trees. The core verifies the declared
 runtime family/version markers and every hash-pinned cache file, then supplies
 `XDG_DATA_HOME`, `XDG_CACHE_HOME`, and `UMU_RUNTIME_UPDATE=0` to both the
@@ -83,9 +86,10 @@ Hardlink manifests verify the exact inode-group topology after materialization
 and after gameplay. These options preserve runtime structure; they do not
 provide network isolation.
 
-A local dependency contract is not functional acceptance. The profile remains
-a candidate until a clean restoration launches with the network isolated,
-loads the intended save and content, closes normally, and verifies again.
+A local dependency contract proves neither gameplay nor restoration. Clean
+restoration, network containment, save and content loading, normal shutdown,
+and post-run verification remain per-game tests recorded as independent
+evidence.
 
 ## Public architecture and acceptance boundary
 
@@ -108,7 +112,7 @@ publish private collection evidence or transfer acceptance to another game.
 
 `verify-umu` reports protected-file, symlink, and `hardlink_group_count` values. The topology counts are part of the verification evidence.
 
-## Shared runtime selection for composition compositions
+## Shared runtime selection for component compositions
 
 A Proton runner is paired with the Steam Linux Runtime named by the archived
 runner's `toolmanifest.vdf` `require_tool_appid`; runtime generation is not
