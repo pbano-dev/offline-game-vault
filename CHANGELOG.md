@@ -10,6 +10,12 @@
 - Diagnostic JSON and composition results expose backend, Steam Runtime, and
   `component_set_id` provenance without obsolete runtime or acceptance fields.
 - Regression tests execute `JUGAR_UMU.sh` and both diagnostic output modes.
+- Archived Steam Runtime `var` content is retained in writable derivatives;
+  generated sanitizers remove only explicitly identified regenerable paths.
+- Package metadata, runtime receipts, and `ogv --version` now agree on 0.11.4.
+- ADR 0016 records the rationale for state-free component composition,
+  independent acceptance evidence, deterministic UMU binding, and narrow
+  sanitization.
 
 ## 0.11.3 — 2026-08-01
 

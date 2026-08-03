@@ -1535,21 +1535,35 @@ exec "$UMU_ENTRYPOINT"{backend_suffix} "$EXE"{game_suffix} "$@"
 """
 
     return script.encode("utf-8")
-def _generic_umu_sanitizer(runtime_var: str, runner: RunnerRecord) -> bytes:
-    runtime = _safe_relative(runtime_var, "runtime_var").as_posix()
-    proton = f"engine/proton/{runner.source_root}"
-    return f'''#!/usr/bin/env bash
+def _generic_umu_sanitizer(
+    runtime_var: str,
+    runner: RunnerRecord,
+) -> bytes:
+    runtime = _safe_relative(
+        runtime_var,
+        "runtime_var",
+    ).as_posix()
+
+    proton = (
+        f"engine/proton/{runner.source_root}"
+    )
+
+    return f"""#!/usr/bin/env bash
 set -Eeuo pipefail
+
 ROOT="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")/.." && pwd -P)"
 RUNTIME_VAR="$ROOT/{runtime}"
 PROTON_ROOT="$ROOT/{proton}"
-if [[ -d "$RUNTIME_VAR" && ! -L "$RUNTIME_VAR" ]]; then
-    find "$RUNTIME_VAR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {{}} +
-fi
+
+[[ -d "$RUNTIME_VAR" && ! -L "$RUNTIME_VAR" ]] || {{
+    printf 'UMU composition: runtime var is absent or linked: %s\n' "$RUNTIME_VAR" >&2
+    exit 1
+}}
+
+# This is a known Proton-generated marker. Unknown archived runtime data is
+# retained because its regenerability has not been demonstrated.
 rm -f -- "$PROTON_ROOT/files/steampipe_fixups_mtime"
-'''.encode("utf-8")
-
-
+""".encode("utf-8")
 def _write_asset(root: Path, relative: str, payload: bytes, mode: int) -> dict[str, Any]:
     path = root.joinpath(*_safe_relative(relative, "generated asset").parts)
     path.parent.mkdir(parents=True, exist_ok=True)

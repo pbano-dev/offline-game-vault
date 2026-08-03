@@ -104,6 +104,10 @@ deterministic UMU entrypoint, runtime family, and content-derived
 
 The selected Proton remains a separate preserved runner object.
 
+The archived Steam Runtime `var` subtree is retained in the writable
+derivative. Generated sanitization is deliberately narrow: it removes only
+known regenerable files and never treats the whole subtree as disposable.
+
 ## Destination-local staging
 
 All large working trees are created on the filesystem selected for the final

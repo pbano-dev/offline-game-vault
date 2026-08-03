@@ -75,6 +75,12 @@ runtime family/version markers and every hash-pinned cache file, then supplies
 `XDG_DATA_HOME`, `XDG_CACHE_HOME`, and `UMU_RUNTIME_UPDATE=0` to both the
 launcher and sanitizer.
 
+The archived runtime `var` subtree is copied into the derivative without an
+empty-directory invariant. A generated sanitizer may remove only a path whose
+regenerability is known and documented. Unknown archived entries are retained.
+This policy protects the reproducibility of the derivative while the original
+CAS object remains immutable.
+
 Archive policy is declared per immutable object mapping. Hardlinks and
 absolute symlinks remain rejected by default. A pinned runtime object may opt
 in to preserving them, while the preflight still rejects unsafe names,

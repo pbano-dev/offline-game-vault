@@ -2002,10 +2002,9 @@ def materialize_umu_profile(
         if (
             not runtime_var.is_dir()
             or runtime_var.is_symlink()
-            or any(runtime_var.iterdir())
         ):
             raise UmuAdapterError(
-                "The declared runtime var directory is absent or non-empty."
+                "The declared runtime var directory is absent or linked."
             )
 
         receipt_id = f"umu-materialization-{uuid.uuid4()}"
@@ -2045,7 +2044,7 @@ def materialize_umu_profile(
                 "symlink_count": symlink_count,
                 "hardlink_group_count": hardlink_group_count,
                 "broken_symlinks": 0,
-                "runtime_var_empty": True,
+                "runtime_var_preserved": True,
                 "offline_environment_verified":
                     offline_environment is not None,
             },
@@ -2170,10 +2169,9 @@ def verify_umu_materialization(
     if (
         not runtime_var.is_dir()
         or runtime_var.is_symlink()
-        or any(runtime_var.iterdir())
     ):
         raise UmuAdapterError(
-            "Runtime var is absent, linked, or non-empty."
+            "Runtime var is absent or linked."
         )
 
     return UmuVerificationResult(

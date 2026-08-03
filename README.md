@@ -43,6 +43,7 @@ Start with:
 - `docs/validation.md`
 - `docs/UMU_BACKEND.md`
 - `docs/COMPONENT_COMPOSITIONS.md`
+- `docs/adr/0016-state-free-component-composition-rationale.md`
 - `docs/DSR_UMU_REFERENCE.md`
 - `docs/NEXT_STEPS.md`
 

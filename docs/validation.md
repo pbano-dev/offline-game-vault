@@ -122,7 +122,7 @@ The UMU suite additionally verifies:
 The test suite uses synthetic objects. Commercial game data, private state, and
 proprietary runtime files are not present in Git.
 
-## Component-composition validation in 0.11.0–0.11.3
+## Component-composition validation in 0.11.0–0.11.4
 
 The composition suite additionally verifies:
 
@@ -135,6 +135,10 @@ The composition suite additionally verifies:
   still verifies;
 - a global UMU/Python backend, a separate Proton runner, and the exact globally
   registered Steam Linux Runtime can be combined;
+- archived runtime `var` content survives materialization, generated
+  sanitization, and verification;
+- project metadata, package runtime, and the leading changelog release expose
+  the same version;
 - missing, corrupt, unsafe, or incompatible components remain blocking errors;
 - no system runner or network download participates in the synthetic tests.
 

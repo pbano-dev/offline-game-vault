@@ -872,6 +872,21 @@ class CompositionTests(unittest.TestCase):
             result.materialized
         )
 
+        runtime_state = (
+            destination
+            / "engine"
+            / "xdg-data"
+            / "umu"
+            / "steamrt4"
+            / "var"
+            / "runtime-state"
+        )
+
+        self.assertEqual(
+            runtime_state.read_bytes(),
+            b"preserved runtime data",
+        )
+
         for name in (
             "JUGAR.sh",
             "VERIFICAR.sh",
@@ -947,6 +962,75 @@ class CompositionTests(unittest.TestCase):
             launched.stderr,
         )
 
+        mutable_marker = (
+            destination
+            / "engine"
+            / "proton"
+            / "ge-proton"
+            / "files"
+            / "steampipe_fixups_mtime"
+        )
+
+        mutable_marker.write_text(
+            "generated\n",
+            encoding="utf-8",
+        )
+
+        sanitized = subprocess.run(
+            [
+                str(
+                    destination
+                    / "launchers"
+                    / "sanear_umu.sh"
+                ),
+            ],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            sanitized.returncode,
+            0,
+            sanitized.stderr,
+        )
+
+        self.assertFalse(
+            mutable_marker.exists()
+        )
+
+        self.assertEqual(
+            runtime_state.read_bytes(),
+            b"preserved runtime data",
+        )
+
+        verified = subprocess.run(
+            [
+                str(
+                    destination
+                    / "VERIFICAR.sh"
+                ),
+            ],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            verified.returncode,
+            0,
+            verified.stderr,
+        )
+
+        self.assertEqual(
+            runtime_state.read_bytes(),
+            b"preserved runtime data",
+        )
+
         backend_result = result.backend_result
 
         self.assertEqual(
@@ -997,6 +1081,21 @@ class CompositionTests(unittest.TestCase):
         self.assertNotIn(
             "composition_composition",
             receipt,
+        )
+
+        self.assertTrue(
+            receipt[
+                "initial_verification"
+            ][
+                "runtime_var_preserved"
+            ]
+        )
+
+        self.assertNotIn(
+            "runtime_var_empty",
+            receipt[
+                "initial_verification"
+            ],
         )
 if __name__ == "__main__":
     unittest.main()
