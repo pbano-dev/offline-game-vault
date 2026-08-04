@@ -46,6 +46,12 @@ from .verifier import (
     resolve_capsule_object,
     verify_object,
 )
+from .composition_state import (
+    CompositionStateError,
+    prepare_composition_state,
+    restore_composition_state,
+    verify_composition_state_evidence,
+)
 
 RECEIPT_NAME = "umu-materialization.json"
 LAST_RUN_RECEIPT = "receipts/last-umu-run.json"
@@ -1600,6 +1606,8 @@ def materialize_umu_profile(
     destination: Path,
     state_root: Path | None = None,
     save_id: str | None = None,
+    state_backup: Path | None = None,
+    require_state_backup: bool = False,
 ) -> UmuMaterializationResult:
     """Verify, assemble, and atomically publish one UMU materialization."""
 
@@ -1611,10 +1619,62 @@ def materialize_umu_profile(
         state_root.expanduser().resolve() if state_root is not None else None
     )
 
+    if state_backup is not None and (
+        state_root is not None or save_id is not None
+    ):
+        raise UmuAdapterError(
+            "Generic --state-backup cannot be combined with "
+            "legacy UMU state_root/save_id selection."
+        )
+
     capsule, profile, contract = _profile_contract(
         capsule_path, profile_id
     )
     capsule_id = capsule["capsule_id"]
+
+    try:
+        state_selection = prepare_composition_state(
+            capsule_path=capsule_path,
+            state_backup=state_backup,
+            require_declared_state=require_state_backup,
+        )
+    except CompositionStateError as exc:
+        raise UmuAdapterError(str(exc)) from exc
+
+    persistent_state_raw = capsule.get("persistent_state", [])
+    if (
+        not isinstance(persistent_state_raw, list)
+        or any(
+            not isinstance(item, dict)
+            for item in persistent_state_raw
+        )
+    ):
+        raise UmuAdapterError(
+            "capsule.persistent_state must be an array of objects."
+        )
+
+    persistent_state_receipts: list[dict[str, Any]] = []
+    for index, item in enumerate(persistent_state_raw):
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or not item_id:
+            raise UmuAdapterError(
+                f"persistent_state[{index}].id is invalid."
+            )
+        item_path = _safe_relative(
+            item.get("path"),
+            f"persistent_state[{index}].path",
+        )
+        persistent_state_receipts.append(
+            {
+                "id": item_id,
+                "path": item_path.as_posix(),
+                "preserve_on_remove": (
+                    item.get("backup", True) is True
+                ),
+                "sensitive": item.get("sensitive", False) is True,
+            }
+        )
+
     dependencies = profile.get("dependencies")
     layout = contract.get("layout")
     if not isinstance(dependencies, list) or any(
@@ -1637,6 +1697,25 @@ def materialize_umu_profile(
         )
 
     allowed_absolute = _allowed_absolute_links(contract)
+
+    legacy_state_archives = contract.get("state_archives", [])
+    if state_selection is not None and legacy_state_archives:
+        raise UmuAdapterError(
+            "Generic persistent-state backups cannot be combined "
+            "with legacy umu.state_archives."
+        )
+
+    generic_prefix_relative = None
+    if state_selection is not None:
+        generic_paths = contract.get("paths")
+        if not isinstance(generic_paths, dict):
+            raise UmuAdapterError("umu.paths must be an object.")
+
+        generic_prefix_relative = _safe_relative(
+            generic_paths.get("prefix"),
+            "umu.paths.prefix",
+        )
+
     state_archives, selected_save = _state_archive(
         contract=contract,
         state_root=state_root,
@@ -1657,6 +1736,31 @@ def materialize_umu_profile(
                 "Existing UMU materialization belongs to another profile."
             )
         receipt = _load_receipt(destination)
+
+        expected_backup_id = (
+            state_selection.backup_id
+            if state_selection is not None
+            else None
+        )
+        receipt_state = receipt.get("state_restore")
+        if (
+            receipt_state is not None
+            and not isinstance(receipt_state, dict)
+        ):
+            raise UmuAdapterError(
+                "Existing UMU state_restore receipt is invalid."
+            )
+        actual_backup_id = (
+            receipt_state.get("backup_id")
+            if isinstance(receipt_state, dict)
+            else None
+        )
+        if actual_backup_id != expected_backup_id:
+            raise UmuAdapterError(
+                "Existing UMU materialization uses another "
+                "persistent-state baseline."
+            )
+
         if receipt.get("selected_save") != selected_save:
             raise UmuAdapterError(
                 "Existing UMU materialization uses another save selection."
@@ -1680,6 +1784,11 @@ def materialize_umu_profile(
         f"{secrets.token_hex(8)}"
     )
     promoted = False
+    state_snapshot = destination.parent / (
+        f".ogv-umu-state-snapshot-{destination.name}-"
+        f"{os.getpid()}-{secrets.token_hex(8)}"
+    )
+    state_evidence = None
 
     object_receipts: list[dict[str, Any]] = []
     launcher_receipts: list[dict[str, Any]] = []
@@ -1994,6 +2103,35 @@ def materialize_umu_profile(
                 f"The UMU sanitizer failed: {sanitizer_result.returncode}"
             )
 
+        if state_selection is not None:
+            assert generic_prefix_relative is not None
+            generic_prefix = _path_under(
+                staging,
+                generic_prefix_relative,
+            )
+            if (
+                generic_prefix.is_symlink()
+                or not generic_prefix.is_dir()
+            ):
+                raise UmuAdapterError(
+                    "The declared UMU prefix root is absent or linked."
+                )
+
+            try:
+                state_evidence = restore_composition_state(
+                    capsule_path=capsule_path,
+                    state_root=generic_prefix,
+                    state_root_relative=(
+                        generic_prefix_relative.as_posix()
+                    ),
+                    selection=state_selection,
+                    snapshot=state_snapshot,
+                    evidence_root=staging / "receipts/state",
+                    evidence_relative="receipts/state",
+                )
+            except CompositionStateError as exc:
+                raise UmuAdapterError(str(exc)) from exc
+
         mutable_raw = contract.get("mutable_paths", [])
         if not isinstance(mutable_raw, list):
             raise UmuAdapterError("umu.mutable_paths must be an array.")
@@ -2076,6 +2214,16 @@ def materialize_umu_profile(
                 "The declared runtime var directory is absent or linked."
             )
 
+        receipt_paths = {
+            "launcher": launcher_relative.as_posix(),
+            "sanitizer": sanitizer_path.as_posix(),
+            "runtime_var": runtime_var_relative.as_posix(),
+        }
+        if generic_prefix_relative is not None:
+            receipt_paths["prefix"] = (
+                generic_prefix_relative.as_posix()
+            )
+
         receipt_id = f"umu-materialization-{uuid.uuid4()}"
         receipt = {
             "schema": 0,
@@ -2089,6 +2237,7 @@ def materialize_umu_profile(
             "objects": object_receipts,
             "state_archives": state_receipts,
             "selected_save": selected_save,
+            "persistent_state": persistent_state_receipts,
             "launchers": launcher_receipts,
             "protected_manifests": protected_receipts,
             "symlink_manifests": symlink_receipts,
@@ -2096,11 +2245,7 @@ def materialize_umu_profile(
             "offline_environment": offline_environment,
             "operational_paths": operational_paths,
             "mutable_paths": mutable_paths,
-            "paths": {
-                "launcher": launcher_relative.as_posix(),
-                "sanitizer": sanitizer_path.as_posix(),
-                "runtime_var": runtime_var_relative.as_posix(),
-            },
+            "paths": receipt_paths,
             "network": profile.get("launch", {}).get(
                 "network", "host_default"
             ),
@@ -2123,6 +2268,9 @@ def materialize_umu_profile(
             },
             "complete": True,
         }
+        if state_evidence is not None:
+            receipt["state_restore"] = state_evidence.to_dict()
+
         _write_json_atomic(staging / RECEIPT_NAME, receipt)
 
         _rename_noreplace(staging, destination)
@@ -2145,6 +2293,8 @@ def materialize_umu_profile(
     finally:
         if not promoted and staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
+        if state_snapshot.exists():
+            shutil.rmtree(state_snapshot, ignore_errors=True)
         _release_lock(lock, lock_descriptor)
 
 
@@ -2160,12 +2310,23 @@ def verify_umu_materialization(
             "UMU materialization must be a regular directory."
         )
     receipt = _load_receipt(destination)
+    try:
+        verify_composition_state_evidence(
+            root=destination,
+            evidence=receipt.get("state_restore"),
+            capsule_id=receipt["capsule_id"],
+        )
+    except CompositionStateError as exc:
+        raise UmuAdapterError(
+            f"Invalid state restoration evidence: {exc}"
+        ) from exc
 
     launchers = receipt.get("launchers")
     protected = receipt.get("protected_manifests")
     symlink_manifests = receipt.get("symlink_manifests")
     hardlink_manifests = receipt.get("hardlink_manifests", [])
     mutable_paths = receipt.get("mutable_paths")
+    persistent_state = receipt.get("persistent_state", [])
     paths = receipt.get("paths")
     operational_paths = receipt.get("operational_paths")
     if (
@@ -2174,10 +2335,36 @@ def verify_umu_materialization(
         or not isinstance(symlink_manifests, list)
         or not isinstance(hardlink_manifests, list)
         or not isinstance(mutable_paths, list)
+        or not isinstance(persistent_state, list)
         or not isinstance(paths, dict)
         or not isinstance(operational_paths, dict)
     ):
         raise UmuAdapterError("UMU receipt is incomplete.")
+
+    for index, item in enumerate(persistent_state):
+        if not isinstance(item, dict):
+            raise UmuAdapterError(
+                "UMU persistent-state receipt is invalid."
+            )
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or not item_id:
+            raise UmuAdapterError(
+                f"receipt.persistent_state[{index}].id is invalid."
+            )
+        _safe_relative(
+            item.get("path"),
+            f"receipt.persistent_state[{index}].path",
+        )
+        if not isinstance(item.get("preserve_on_remove"), bool):
+            raise UmuAdapterError(
+                f"receipt.persistent_state[{index}]."
+                "preserve_on_remove must be boolean."
+            )
+        if not isinstance(item.get("sensitive"), bool):
+            raise UmuAdapterError(
+                f"receipt.persistent_state[{index}]."
+                "sensitive must be boolean."
+            )
 
     for item in launchers:
         if not isinstance(item, dict):
@@ -2313,7 +2500,16 @@ def remove_umu_materialization(
     receipt = _load_receipt(destination)
     selected_save = receipt.get("selected_save")
     state_archives = receipt.get("state_archives", [])
-    has_persistent_state = bool(state_archives)
+    persistent_state = receipt.get("persistent_state", [])
+    if not isinstance(persistent_state, list):
+        raise UmuAdapterError(
+            "UMU persistent-state receipt is invalid."
+        )
+    has_persistent_state = bool(state_archives) or any(
+        isinstance(item, dict)
+        and item.get("preserve_on_remove") is True
+        for item in persistent_state
+    )
     if has_persistent_state and not confirm_state_preserved:
         raise UmuAdapterError(
             "UMU persistent state must be preserved before removal. "

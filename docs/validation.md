@@ -122,7 +122,7 @@ The UMU suite additionally verifies:
 The test suite uses synthetic objects. Commercial game data, private state, and
 proprietary runtime files are not present in Git.
 
-## Component-composition validation in 0.11.0–0.11.4
+## Component-composition validation in 0.11.0–0.12.0
 
 The composition suite additionally verifies:
 
@@ -140,7 +140,13 @@ The composition suite additionally verifies:
 - project metadata, package runtime, and the leading changelog release expose
   the same version;
 - missing, corrupt, unsafe, or incompatible components remain blocking errors;
-- no system runner or network download participates in the synthetic tests.
+- no system runner or network download participates in the synthetic tests;
+- `--state-backup` is forwarded for Bottles, Direct-Wine, and UMU;
+- Bottles and UMU restore verified state into their effective staged roots;
+- the preserved source remains unchanged;
+- matching UMU baselines are reusable and different baselines are rejected;
+- altered baseline receipts are rejected by backend verification;
+- generic UMU persistent state participates in guarded removal.
 
 Independent acceptance reports remain schema-validated evidence. They are not
 profile fields and are not permission gates.

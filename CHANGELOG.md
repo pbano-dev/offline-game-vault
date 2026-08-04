@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.12.0 — 2026-08-04
+
+### Added
+
+- Backend-neutral `compose --state-backup` support for Bottles, Direct-Wine,
+  and UMU/Proton.
+- Explicit UMU prefix-root propagation from the neutral playable contract.
+- Shared restoration evidence recording the selected backup identity,
+  pre-restore snapshot identity, backend state root, copied baseline receipt,
+  and baseline receipt SHA-256.
+- Verification of restoration evidence during Bottles and UMU verification.
+
+### Changed
+
+- The composition boundary now requires a verified state backup whenever the
+  capsule declares preservable persistent state, regardless of backend.
+- Bottles restores into the staged bottle root; UMU restores into the declared
+  staged prefix; Direct-Wine retains its verified prefix restoration path.
+- UMU reuse rejects a different persistent-state baseline.
+- Generic persistent state participates in UMU guarded removal.
+- Legacy `umu.state_archives` remains a separate low-level mechanism and cannot
+  be combined with generic `--state-backup`.
+- Project version advanced from `0.11.4` to `0.12.0`.
+
+### Security
+
+- State restoration occurs before atomic publication and uses the generic
+  verified backup engine with a mandatory pre-restore snapshot.
+- Evidence paths must remain relative, regular, and free of symlink traversal.
+- Bottles and UMU reject altered baseline-state receipts during verification.
+
+### Validation
+
+- Synthetic tests restore a verified backup physically in Bottles and UMU.
+- Tests cover source preservation, receipt evidence, matching-baseline reuse,
+  rejection of a different UMU baseline, and altered-evidence detection.
+- The complete repository suite passes with the backend-neutral contract.
+
 ## 0.11.4 — 2026-08-03
 ### Fixed
 

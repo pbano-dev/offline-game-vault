@@ -1378,6 +1378,7 @@ def _command_compose(args: argparse.Namespace) -> int:
         result = compose_umu(
             **common,
             destination=args.destination,
+            state_backup=args.state_backup,
             arguments=forwarded,
         )
     else:
@@ -1393,6 +1394,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             **common,
             bottles_path=args.bottles_path,
             bottle_name=args.bottle_name,
+            state_backup=args.state_backup,
         )
 
     if args.json:
@@ -2365,7 +2367,10 @@ def build_parser() -> argparse.ArgumentParser:
     composition_parser.add_argument(
         "--state-backup",
         type=Path,
-        help="Verified state backup for Direct-Wine.",
+        help=(
+            "Verified persistent-state backup for the selected backend. "
+            "Required when the capsule declares preservable state."
+        ),
     )
     composition_parser.add_argument(
         "--bottles-path",
