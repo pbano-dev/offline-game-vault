@@ -2,7 +2,7 @@
 
 Status: **implemented generation-0 core with validated extensions**
 Schema generation: **0**
-Last updated: **2026-08-03**
+Last updated: **2026-08-04**
 
 ## 1. Purpose
 
@@ -434,7 +434,7 @@ Unsupported future generations are rejected rather than guessed.
 
 ## 22. Implementation status
 
-Implemented in the `0.10.1` work tree:
+Implemented in the `0.11.4` work tree:
 
 - content-addressed ingestion and verification;
 - safe staged materialization;
@@ -442,12 +442,19 @@ Implemented in the `0.10.1` work tree:
 - generic persistent-state transactions;
 - Bottles deployment;
 - direct-Wine playable materialization;
-- UMU materialization with offline dependencies;
+- UMU materialization with preserved offline dependencies;
+- state-free component composition for Bottles, Direct-Wine, and UMU;
+- deterministic selection of verified preserved runners and UMU component sets;
+- canonical root-level play, verification, and removal operations;
 - archive, symlink, hardlink, protected-file, and environment verification.
 
-Validated architecture pending core command integration:
+Pending stable core command families:
 
 - catalog build and verification;
 - external-dependency capture workflow;
-- end-to-end transactional profile publication;
-- GUI job orchestration.
+- end-to-end transactional profile publication.
+
+The companion GUI consumes the public composition commands and generated root
+operations. Backend assembly, dependency resolution, and execution policy
+remain core responsibilities. Successful technical composition does not itself
+prove functional acceptance.

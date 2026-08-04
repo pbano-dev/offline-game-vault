@@ -1,4 +1,4 @@
-# Next steps after the component-composition 0.11.3 integration
+# Next steps after the state-free component-composition 0.11.4 integration
 
 This document is public project context. It deliberately excludes private
 collection paths, object digests, save identities, operation IDs, and raw logs.
@@ -84,26 +84,33 @@ those IDs as opaque keys and never infer maturity or permission from their
 wording. Any migration must preserve aliases and provenance; an identifier must
 not be renamed in place after state or receipts reference it.
 
-## Priority 5: GUI integration
+## Completed GUI integration baseline
 
-The GUI should call core operations and display:
+The companion GUI `0.4.1` consumes the state-free core contract:
 
-- source capsule versus derived profile;
+- discovers capsule source layouts without maturity state;
+- obtains preserved runners from the core;
+- lets the core resolve the concrete UMU component set;
+- calls `compose` for Bottles, Direct-Wine, and UMU;
+- invokes generated `JUGAR.sh`, `VERIFICAR.sh`, and `DESINSTALAR.sh`;
+- leaves backend assembly, dependency resolution, and execution policy in the
+  core.
+
+## Priority 5: expand GUI evidence surfaces
+
+Future GUI work may display:
+
+- source capsule versus derived materialization;
 - immutable objects versus mutable state;
 - required and shared dependencies;
-- external dependencies detected and internalized;
 - clean-restoration evidence;
-- functional test evidence;
+- functional acceptance evidence;
 - privacy result;
 - reproducibility versus network containment;
 - publication and catalog status.
 
 The GUI must not embed game-specific paths, hashes, runners, or dependency
-lists. It should obtain preserved runners from the core, while shared UMU
-runtimes are resolved internally by the core, then call
-`compose` for user-requested combinations.
-Recommendations and test evidence must remain visible without becoming a
-permission gate.
+lists. Evidence remains visible without becoming a permission gate.
 
 ## Per-game workflow after DSR
 
