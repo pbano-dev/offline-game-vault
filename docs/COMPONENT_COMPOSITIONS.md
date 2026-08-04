@@ -31,7 +31,24 @@ The command lists only objects that:
 
 No network lookup, download, or system-runner fallback occurs.
 
-## 2. Direct-Wine
+## 2. Persistent state for every backend
+
+When the capsule declares any `persistent_state` item with `backup: true`,
+composition requires:
+
+```text
+--state-backup <VERIFIED_STATE_BACKUP>
+```
+
+This contract is identical for Bottles, Direct-Wine, and UMU. The backup must
+verify against the operational capsule before any state is restored. The core
+resolves the effective backend state root, creates a mandatory pre-restore
+snapshot, restores in staging, records evidence, and only then publishes.
+
+The GUI supplies the selected backup path. It does not construct save paths,
+prefix paths, or backend-specific restoration commands.
+
+## 3. Direct-Wine
 
 ```bash
 ogv compose \
@@ -45,9 +62,8 @@ ogv compose \
 Add `--play` to launch after successful materialization. Additional game
 arguments go after `--`.
 
-A selected state backup may be supplied with `--state-backup`.
 
-## 3. Bottles
+## 4. Bottles
 
 ```bash
 ogv compose \
@@ -70,7 +86,7 @@ enumerated by `bottles-cli` before success is reported.
 
 `--play` launches the resulting managed bottle after deployment.
 
-## 4. UMU/Proton
+## 5. UMU/Proton
 
 ```bash
 ogv compose \
@@ -102,7 +118,11 @@ independently verified backend component, Steam Linux Runtime component,
 deterministic UMU entrypoint, runtime family, and content-derived
 `component_set_id`.
 
-The selected Proton remains a separate preserved runner object.
+The selected Proton remains a separate preserved runner object. For generic
+persistent-state restoration, the synthesized UMU profile carries the neutral
+playable prefix as `umu.paths.prefix`; no title, AppID, username, or private
+host path is hard-coded. Generic `--state-backup` cannot be combined with the
+legacy low-level `umu.state_archives` selection.
 
 The archived Steam Runtime `var` subtree is retained in the writable
 derivative. Generated sanitization is deliberately narrow: it removes only
@@ -120,7 +140,7 @@ Hidden `.ogv-*` working directories are verified and then published
 atomically. They are removed after success or failure. `/tmp` is not used for
 large game copies.
 
-## 5. Recipes, evidence, and provenance
+## 6. Recipes, evidence, and provenance
 
 Source profiles are recipes and provenance records. They do not carry maturity
 or authorization state. The core selects a technically compatible neutral Linux

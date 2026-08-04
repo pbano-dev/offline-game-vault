@@ -1,4 +1,4 @@
-# Offline Game Vault — Architecture 0.11
+# Offline Game Vault — Architecture 0.12
 
 Status: **implemented generation-0 core with validated extensions**
 Schema generation: **0**
@@ -192,6 +192,22 @@ that data can be discarded.
 The state engine uses an explicit state root and relative item paths. It never
 guesses paths from a title, AppID, username, or adapter. Restore requires a
 verified source and a mandatory rollback snapshot.
+
+At the composition boundary, a capsule with preservable state requires one
+verified `--state-backup` for every supported backend. The backend adapter
+resolves the effective state root:
+
+```text
+Direct-Wine → declared playable prefix
+Bottles     → staged bottle root
+UMU         → staged prefix declared by umu.paths.prefix
+```
+
+Restoration completes before atomic publication. Bottles and UMU receipts
+record the selected backup identity, snapshot identity, backend state root,
+baseline receipt digest, and restore receipt path. Reuse must match the same
+baseline identity. Legacy `umu.state_archives` remains a distinct low-level
+mechanism and is not combined with generic state restoration.
 
 ## 8. Materialization boundary
 

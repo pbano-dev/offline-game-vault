@@ -77,6 +77,11 @@ The composition path never downloads components and never falls back to a
 system runner. Missing or corrupt objects, unsafe paths, incompatible runners,
 and absent preserved backend pieces remain blocking errors.
 
+When a capsule declares preservable `persistent_state`, `compose` requires a
+verified `--state-backup` for Bottles, Direct-Wine, and UMU alike. The core,
+not the GUI, resolves the backend state root, restores before publication, and
+records the selected baseline identity and restoration evidence.
+
 ### Operational scripts in materializations
 
 Bottles, Direct-Wine, and UMU derivatives all publish `JUGAR.sh`,

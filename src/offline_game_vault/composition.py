@@ -725,6 +725,7 @@ def compose_bottles(
     bottles_path: Path | None = None,
     bottle_name: str,
     source_profile_id: str | None = None,
+    state_backup: Path | None = None,
     play: bool = False,
 ) -> CompositionResult:
     collection_root = collection_root.expanduser().resolve(strict=True)
@@ -799,6 +800,8 @@ def compose_bottles(
                 materialization=raw,
                 bottles_path=bottles_path,
                 bottle_name=bottle_name,
+                state_backup=state_backup,
+                require_state_backup=True,
             )
             if play:
                 launch_plan, returncode = run_bottles_deployment(
@@ -1621,6 +1624,17 @@ def _umu_overlay(
     if not isinstance(layout, list) or not layout:
         raise CompositionError("Derived Wine layout is absent.")
 
+    playable_paths = playable.get("paths")
+    if not isinstance(playable_paths, dict):
+        raise CompositionError(
+            "Derived Wine playable paths are absent."
+        )
+    prefix_path = playable_paths.get("prefix")
+    if not isinstance(prefix_path, str) or not prefix_path:
+        raise CompositionError(
+            "Derived Wine prefix path is absent."
+        )
+
     object_index = {
         item.get("id"): item
         for item in objects
@@ -1786,6 +1800,7 @@ def _umu_overlay(
             "launcher": launcher_item["destination"],
             "sanitizer": sanitizer_item["destination"],
             "runtime_var": runtime.runtime_var,
+            "prefix": prefix_path,
         },
     }
     source["notes"] = (
@@ -1804,6 +1819,7 @@ def compose_umu(
     runner_id: str,
     destination: Path,
     source_profile_id: str | None = None,
+    state_backup: Path | None = None,
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
@@ -1838,6 +1854,8 @@ def compose_umu(
             profile_id=profile_id,
             vault_root=vault_root,
             destination=destination,
+            state_backup=state_backup,
+            require_state_backup=True,
         )
         played = False
         play_complete: bool | None = None

@@ -735,6 +735,9 @@
             },
             "sanitizer": {
               "$ref": "#/$defs/relativePath"
+            },
+            "prefix": {
+              "$ref": "#/$defs/relativePath"
             }
           },
           "required": [

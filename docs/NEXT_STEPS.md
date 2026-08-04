@@ -1,4 +1,4 @@
-# Next steps after the state-free component-composition 0.11.4 integration
+# Next steps after the backend-neutral persistent-state 0.12.0 integration
 
 This document is public project context. It deliberately excludes private
 collection paths, object digests, save identities, operation IDs, and raw logs.
@@ -40,7 +40,7 @@ Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
   Linux Runtime components.
 
 
-## Completed in 0.11.1–0.11.3
+## Completed in 0.11.1–0.11.4
 
 - Moved large staging trees beside their final destination.
 - Restored Bottles managed-path discovery through `bottles-cli` and made an
@@ -50,6 +50,19 @@ Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
 - Resolved the exact Steam Linux Runtime from each Proton runner's archived
   `toolmanifest.vdf`, including the steamrt3/sniper naming distinction.
 - Excluded incomplete and mismatched shared runtimes before materialization.
+- Bound UMU launchers deterministically to the preserved backend entrypoint
+  and narrowed runtime sanitization to explicitly identified regenerable
+  paths.
+
+## Completed in 0.12.0
+
+- Generalized `compose --state-backup` across Bottles, Direct-Wine, and UMU.
+- Kept backend state-root resolution inside the core.
+- Restored state transactionally in staged Bottles and UMU derivatives.
+- Recorded and verified backend-neutral restoration evidence.
+- Rejected mismatched UMU baselines during materialization reuse.
+- Included generic UMU persistent state in guarded removal.
+- Kept legacy `umu.state_archives` separate from the generic backup contract.
 
 ## Priority 2: move validated external workflows into the core
 
@@ -84,9 +97,9 @@ those IDs as opaque keys and never infer maturity or permission from their
 wording. Any migration must preserve aliases and provenance; an identifier must
 not be renamed in place after state or receipts reference it.
 
-## Completed GUI integration baseline
+## GUI integration baseline and pending 0.12.0 update
 
-The companion GUI `0.4.1` consumes the state-free core contract:
+The companion GUI `0.4.1` consumes the state-free `0.11.4` core contract:
 
 - discovers capsule source layouts without maturity state;
 - obtains preserved runners from the core;
@@ -95,6 +108,14 @@ The companion GUI `0.4.1` consumes the state-free core contract:
 - invokes generated `JUGAR.sh`, `VERIFICAR.sh`, and `DESINSTALAR.sh`;
 - leaves backend assembly, dependency resolution, and execution policy in the
   core.
+
+For the `0.12.0` contract, the GUI still needs to:
+
+- expose verified state-backup selection for any backend when the capsule
+  declares preservable persistent state;
+- pass the selected backup through the common `compose --state-backup` option;
+- leave prefix, save-path, restoration, reuse, and verification decisions in
+  the core.
 
 ## Priority 5: expand GUI evidence surfaces
 

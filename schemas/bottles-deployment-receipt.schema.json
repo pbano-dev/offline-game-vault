@@ -160,6 +160,67 @@
     "source_tree_sha256": {
       "pattern": "^[0-9a-f]{64}$",
       "type": "string"
+    },
+    "state_restore": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": 0
+        },
+        "backup_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot_backup_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restored_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "state_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseline_receipt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseline_receipt_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "restore_receipt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "complete": {
+          "const": true
+        }
+      },
+      "required": [
+        "schema",
+        "backup_id",
+        "snapshot_backup_id",
+        "item_count",
+        "restored_count",
+        "missing_count",
+        "state_root",
+        "baseline_receipt",
+        "baseline_receipt_sha256",
+        "restore_receipt",
+        "complete"
+      ],
+      "type": "object"
     }
   },
   "required": [

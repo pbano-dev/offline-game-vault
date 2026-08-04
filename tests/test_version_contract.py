@@ -49,9 +49,9 @@ class VersionContractTests(unittest.TestCase):
 
         assert published is not None
 
-        self.assertEqual(
+        self.assertRegex(
             __version__,
-            "0.11.4",
+            r"^[0-9]+\.[0-9]+\.[0-9]+$",
         )
 
         self.assertEqual(

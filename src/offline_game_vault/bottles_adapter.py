@@ -20,6 +20,12 @@ from typing import Any, Iterable
 import uuid
 
 from . import __version__
+from .composition_state import (
+    CompositionStateError,
+    prepare_composition_state,
+    restore_composition_state,
+    verify_composition_state_evidence,
+)
 
 
 DEPLOYMENT_RECEIPT_NAME = ".ogv-bottles-deployment.json"
@@ -1117,6 +1123,8 @@ def deploy_bottles_profile(
     materialization: Path,
     bottles_path: Path,
     bottle_name: str,
+    state_backup: Path | None = None,
+    require_state_backup: bool = False,
 ) -> BottlesDeploymentResult:
     """Copy one materialized bottle into Bottles as a mutable derivative."""
 
@@ -1139,6 +1147,15 @@ def deploy_bottles_profile(
             profile_id=profile_id,
         )
     )
+    try:
+        state_selection = prepare_composition_state(
+            capsule_path=capsule_path,
+            state_backup=state_backup,
+            require_declared_state=require_state_backup,
+        )
+    except CompositionStateError as exc:
+        raise BottlesAdapterError(str(exc)) from exc
+
     capsule_id = capsule["capsule_id"]
     object_id = bottle_object.get("id")
     if not isinstance(object_id, str) or not object_id:
@@ -1214,6 +1231,11 @@ def deploy_bottles_profile(
     )
     promoted = False
     published = False
+    state_snapshot = bottles_path / (
+        f".ogv-state-snapshot-{bottle_name}-"
+        f"{os.getpid()}-{secrets.token_hex(8)}"
+    )
+    state_evidence = None
 
     try:
         if target.exists() or target.is_symlink():
@@ -1256,6 +1278,20 @@ def deploy_bottles_profile(
             raise BottlesAdapterError(
                 "Staged bottle identity verification failed."
             )
+
+        if state_selection is not None:
+            try:
+                state_evidence = restore_composition_state(
+                    capsule_path=capsule_path,
+                    state_root=staging,
+                    state_root_relative=".",
+                    selection=state_selection,
+                    snapshot=state_snapshot,
+                    evidence_root=staging / "receipts/state",
+                    evidence_relative="receipts/state",
+                )
+            except CompositionStateError as exc:
+                raise BottlesAdapterError(str(exc)) from exc
 
         _, deployed_summary = _tree_manifest(staging)
 
@@ -1314,6 +1350,9 @@ def deploy_bottles_profile(
                 ],
             },
         }
+        if state_evidence is not None:
+            receipt["state_restore"] = state_evidence.to_dict()
+
         _write_deployment_receipt(
             staging=staging,
             document=receipt,
@@ -1348,6 +1387,8 @@ def deploy_bottles_profile(
                 shutil.rmtree(staging, ignore_errors=True)
             if published and target.exists() and not target.is_symlink():
                 shutil.rmtree(target, ignore_errors=True)
+        if state_snapshot.exists():
+            shutil.rmtree(state_snapshot, ignore_errors=True)
         _release_lock(lock, descriptor)
 
 
@@ -1456,6 +1497,16 @@ def verify_bottles_deployment(
         target=target,
         bottle_name=bottle_name,
     )
+    try:
+        verify_composition_state_evidence(
+            root=target,
+            evidence=receipt.get("state_restore"),
+            capsule_id=receipt["capsule_id"],
+        )
+    except CompositionStateError as exc:
+        raise BottlesAdapterError(
+            f"Invalid state restoration evidence: {exc}"
+        ) from exc
 
     fields = _read_top_level_bottle_fields(target / "bottle.yml")
     configuration_valid = (
