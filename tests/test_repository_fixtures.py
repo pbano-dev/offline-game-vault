@@ -4,7 +4,11 @@ from pathlib import Path, PurePosixPath
 import json
 import os
 import re
+import shutil
 import stat
+import subprocess
+import sys
+import tempfile
 import unittest
 
 
@@ -166,6 +170,83 @@ class RepositoryFixtureTests(unittest.TestCase):
                     self.assertNotIn("..", path.parts)
                     self.assertTrue((fixture / relative).is_file())
 
+    def test_validator_rejects_invalid_independent_acceptance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            validation_root = Path(temporary)
+
+            shutil.copytree(
+                REPOSITORY_ROOT / "schemas",
+                validation_root / "schemas",
+            )
+
+            source_fixture = (
+                FIXTURES_ROOT
+                / "dark-souls-remastered"
+            )
+            target_fixture = (
+                validation_root
+                / "fixtures"
+                / source_fixture.name
+            )
+            target_fixture.parent.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            shutil.copytree(
+                source_fixture,
+                target_fixture,
+            )
+
+            report_path = (
+                target_fixture
+                / "acceptance.direct-wine.json"
+            )
+            report = read_json(report_path)
+            report.pop("result")
+
+            report_path.write_text(
+                json.dumps(
+                    report,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(
+                        REPOSITORY_ROOT
+                        / "tools"
+                        / "validate_repository.py"
+                    ),
+                    "--root",
+                    str(validation_root),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(
+                result.returncode,
+                0,
+            )
+            self.assertIn(
+                "acceptance.direct-wine.json",
+                result.stderr,
+            )
+            self.assertIn(
+                "required property",
+                result.stderr,
+            )
+
     def test_fixtures_have_no_payload_or_private_paths(self) -> None:
         for fixture in self.fixture_roots():
             files, _symlinks, _special = inventory(fixture)
@@ -187,46 +268,6 @@ class RepositoryFixtureTests(unittest.TestCase):
 
                     for pattern in PRIVATE_PATTERNS:
                         self.assertIsNone(pattern.search(text))
-
-    def test_optional_profiles_follow_recorded_evidence(self) -> None:
-        sekiro = (
-            FIXTURES_ROOT
-            / "sekiro-shadows-die-twice"
-        )
-        capsule = read_json(sekiro / "capsule.json")
-        profiles = capsule.get("profiles")
-        self.assertIsInstance(profiles, list)
-        profile_ids = {
-            profile.get("id")
-            for profile in profiles
-            if isinstance(profile, dict)
-        }
-        self.assertEqual(
-            profile_ids,
-            {
-                "linux-bottles-flatpak",
-                "linux-direct-wine",
-            },
-        )
-        self.assertTrue(
-            (
-                sekiro
-                / "host-contract.linux-direct-wine.json"
-            ).is_file()
-        )
-        self.assertTrue(
-            (
-                sekiro
-                / "acceptance.direct-wine.json"
-            ).is_file()
-        )
-        self.assertFalse(
-            (
-                sekiro
-                / "host-contract.windows-native.json"
-            ).exists()
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

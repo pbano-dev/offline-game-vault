@@ -182,7 +182,6 @@ class RepositoryValidation:
         self,
         path: Path,
         report: dict[str, Any],
-        profile_id: str,
     ) -> None:
         tests = report.get("tests", [])
         test_ids = [
@@ -192,7 +191,11 @@ class RepositoryValidation:
             and isinstance(test.get("id"), str)
         ]
         duplicates = sorted(
-            {test_id for test_id in test_ids if test_ids.count(test_id) > 1}
+            {
+                test_id
+                for test_id in test_ids
+                if test_ids.count(test_id) > 1
+            }
         )
         if duplicates:
             self.error(
@@ -227,15 +230,6 @@ class RepositoryValidation:
                 f"{self.relative(path)}: result 'failed' requires at least "
                 "one failed check"
             )
-
-        report_profile = report.get("profile_id")
-        if report_profile != profile_id:
-            self.error(
-                f"{self.relative(path)}: profile_id {report_profile!r} "
-                f"does not match referencing profile {profile_id!r}"
-            )
-
-
     def check_object_granularity(
         self,
         capsule_path: Path,
@@ -451,7 +445,6 @@ class RepositoryValidation:
                 f"{', '.join(duplicate_profile_ids)}"
             )
 
-        referenced_acceptance: set[Path] = set()
         referenced_contracts: set[Path] = set()
 
         for index, profile in enumerate(profiles):
@@ -495,56 +488,6 @@ class RepositoryValidation:
                             f"{profile.get('platform')!r}"
                         )
 
-            report_name = profile.get("acceptance_report")
-            if report_name is None:
-                if profile.get("status") == "verified":
-                    self.error(
-                        f"{context}: verified profile requires "
-                        "acceptance_report"
-                    )
-                continue
-
-            report_path = self.require_relative_file(
-                fixture_dir,
-                report_name,
-                f"{context}.acceptance_report",
-            )
-            if report_path is None:
-                continue
-
-            referenced_acceptance.add(report_path.resolve())
-            report = self.load_json(report_path)
-            if isinstance(report, dict):
-                self.validate_instance(
-                    report_path,
-                    report,
-                    "acceptance",
-                )
-                self.check_privacy(report_path, report)
-
-                if report.get("capsule_id") != capsule_id:
-                    self.error(
-                        f"{self.relative(report_path)}: capsule_id "
-                        f"{report.get('capsule_id')!r} does not match "
-                        f"{capsule_id!r}"
-                    )
-
-                self.check_acceptance_logic(
-                    report_path,
-                    report,
-                    str(profile_id),
-                )
-
-                if (
-                    profile.get("status") == "verified"
-                    and report.get("result")
-                    not in {"passed", "passed_with_limitations"}
-                ):
-                    self.error(
-                        f"{context}: verified profile requires a "
-                        "passing acceptance result"
-                    )
-
         for path in sorted(fixture_dir.glob("host-contract*.json")):
             instance = self.load_json(path)
             if isinstance(instance, dict):
@@ -557,11 +500,14 @@ class RepositoryValidation:
         for path in sorted(fixture_dir.glob("acceptance*.json")):
             instance = self.load_json(path)
             if isinstance(instance, dict):
-                if path.resolve() not in referenced_acceptance:
+                self.validate_instance(path, instance, "acceptance")
+                self.check_privacy(path, instance)
+                if instance.get("capsule_id") != capsule_id:
                     self.error(
-                        f"{self.relative(path)}: acceptance report is not "
-                        "referenced by any profile"
+                        f"{self.relative(path)}: acceptance capsule_id does "
+                        "not match fixture capsule_id"
                     )
+                self.check_acceptance_logic(path, instance)
 
         for path in sorted(fixture_dir.glob("receipt*.json")):
             instance = self.load_json(path)

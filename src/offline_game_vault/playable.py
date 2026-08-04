@@ -130,7 +130,6 @@ class LayoutMapping:
 
 @dataclass(frozen=True)
 class PlayableContract:
-    profile_status: str
     backend: str
     prefix: PurePosixPath
     runner: PurePosixPath
@@ -228,9 +227,6 @@ def _profile_and_contract(
         raise PlayableError(
             "Direct-Wine playable materialization currently requires Linux."
         )
-    status = profile.get("status")
-    if not isinstance(status, str):
-        raise PlayableError("The requested profile has no valid status.")
 
     playable = profile.get("playable")
     if not isinstance(playable, dict):
@@ -415,7 +411,6 @@ def _profile_and_contract(
         )
 
     contract = PlayableContract(
-        profile_status=status,
         backend="wine",
         prefix=prefix,
         runner=runner,
@@ -438,7 +433,6 @@ def _profile_and_contract(
             {
                 "adapter": profile.get("adapter"),
                 "platform": profile.get("platform"),
-                "status": status,
                 "dependencies": list(dependencies),
                 "launch": {
                     "entrypoint": entrypoint.as_posix(),
@@ -1026,8 +1020,6 @@ def materialize_playable_profile(
             "receipt_id": receipt_id,
             "capsule_id": capsule_id,
             "profile_id": profile_id,
-            "profile_status": contract.profile_status,
-            "experimental_variant": profile.get("variant"),
             "backend": "wine",
             "created_at": _now(),
             "orchestrator_version": __version__,

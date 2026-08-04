@@ -197,7 +197,6 @@ exit 0
                     "id": "linux-direct-wine",
                     "platform": "linux",
                     "adapter": "wine",
-                    "status": "verified",
                     "dependencies": ["game", "runner"],
                     "host_contract": "host-contract.json",
                     "launch": {
@@ -298,7 +297,6 @@ exit 0
                             },
                         ],
                     },
-                    "acceptance_report": "acceptance.json",
                 }
             ],
         }
@@ -315,10 +313,6 @@ exit 0
                 encoding="utf-8",
             )
         (self.fixture / "host-contract.json").write_text(
-            "{}\n",
-            encoding="utf-8",
-        )
-        (self.fixture / "acceptance.json").write_text(
             "{}\n",
             encoding="utf-8",
         )
@@ -402,6 +396,19 @@ exit 0
             destination=self.destination,
             state_backup=self.backup,
         )
+
+    def test_profile_maturity_metadata_is_not_required_or_emitted(
+        self,
+    ) -> None:
+        self._materialize()
+        receipt = json.loads(
+            (
+                self.destination
+                / "playable-materialization.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertNotIn("profile_status", receipt)
+        self.assertNotIn("composition_composition", receipt)
 
     def test_materializes_restores_and_validates_receipt(self) -> None:
         result = self._materialize()

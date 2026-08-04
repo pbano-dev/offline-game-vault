@@ -45,7 +45,6 @@ class PlannerTests(unittest.TestCase):
                     "id": "linux-bottles",
                     "platform": "linux",
                     "adapter": "bottles",
-                    "status": "candidate",
                     "dependencies": ["game-object"],
                     "host_contract": "host-contract.json",
                     "launch": {

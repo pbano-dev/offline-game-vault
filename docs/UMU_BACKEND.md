@@ -7,8 +7,11 @@ UMU as direct Wine.
 
 - Immutable game objects contain game/media data and may contain a sealed,
   nested prefix baseline.
-- Shared UMU objects contain the preserved UMU launcher, Proton build, portable
-  Python, and Steam Linux Runtime.
+- Global UMU backend objects contain the preserved UMU launcher and portable
+  Python environment.
+- Proton builds are separate globally registered runner objects.
+- Steam Linux Runtime families are separate globally registered runtime
+  objects.
 - Operational launchers and sanitizers are capsule assets.
 - Required configuration and selectable saves are state archives.
 - Published materializations are writable derivatives outside the vault.
@@ -66,11 +69,17 @@ not itself create a backup.
 
 ## Preserved offline dependencies
 
-An UMU profile may declare `offline_environment` to bind a materialization to
+A UMU profile may declare `offline_environment` to bind a materialization to
 preserved local XDG data and cache trees. The core verifies the declared
 runtime family/version markers and every hash-pinned cache file, then supplies
 `XDG_DATA_HOME`, `XDG_CACHE_HOME`, and `UMU_RUNTIME_UPDATE=0` to both the
 launcher and sanitizer.
+
+The archived runtime `var` subtree is copied into the derivative without an
+empty-directory invariant. A generated sanitizer may remove only a path whose
+regenerability is known and documented. Unknown archived entries are retained.
+This policy protects the reproducibility of the derivative while the original
+CAS object remains immutable.
 
 Archive policy is declared per immutable object mapping. Hardlinks and
 absolute symlinks remain rejected by default. A pinned runtime object may opt
@@ -83,9 +92,21 @@ Hardlink manifests verify the exact inode-group topology after materialization
 and after gameplay. These options preserve runtime structure; they do not
 provide network isolation.
 
-A local dependency contract is not functional acceptance. The profile remains
-a candidate until a clean restoration launches with the network isolated,
-loads the intended save and content, closes normally, and verifies again.
+A local dependency contract proves neither gameplay nor restoration. Clean
+restoration, network containment, save and content loading, normal shutdown,
+and post-run verification remain per-game tests recorded as independent
+evidence.
+
+## Pressure-vessel runtime-context symlinks
+
+Immediate `runtime_var/tmp-*` directories are pressure-vessel-generated
+container roots. Their symlinks can intentionally refer to `/run/host`,
+container-absolute paths, or mount topology that does not exist in the host
+namespace. The core preserves those links and excludes only those concrete
+temporary roots from host-side target-resolution checks.
+
+Archive path and link preflight remains mandatory. A broken symlink outside
+those concrete temporary roots remains a blocking integrity error.
 
 ## Public architecture and acceptance boundary
 
@@ -108,7 +129,7 @@ publish private collection evidence or transfer acceptance to another game.
 
 `verify-umu` reports protected-file, symlink, and `hardlink_group_count` values. The topology counts are part of the verification evidence.
 
-## Shared runtime selection for experimental variants
+## Shared runtime selection for component compositions
 
 A Proton runner is paired with the Steam Linux Runtime named by the archived
 runner's `toolmanifest.vdf` `require_tool_appid`; runtime generation is not

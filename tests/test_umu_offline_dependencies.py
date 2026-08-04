@@ -255,7 +255,6 @@ class UmuOfflineDependencyTests(unittest.TestCase):
                     "id": "linux-umu-offline",
                     "platform": "linux",
                     "adapter": "umu",
-                    "status": "candidate",
                     "dependencies": [
                         "game",
                         "backend",

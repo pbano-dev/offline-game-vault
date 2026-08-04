@@ -79,7 +79,6 @@ class StateCliTests(unittest.TestCase):
                             "id": "linux-wine",
                             "platform": "linux",
                             "adapter": "wine",
-                            "status": "candidate",
                             "dependencies": ["payload"],
                             "host_contract": "host-contract.json",
                             "launch": {

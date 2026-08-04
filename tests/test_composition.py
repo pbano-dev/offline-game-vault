@@ -11,12 +11,12 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from offline_game_vault.experimental import (
-    ExperimentalVariantError,
+from offline_game_vault.composition import (
+    CompositionError,
     list_shared_umu_runtimes,
-    materialize_experimental_bottles,
-    materialize_experimental_umu,
-    materialize_experimental_wine,
+    compose_bottles,
+    compose_umu,
+    compose_wine,
 )
 from offline_game_vault.preserved_runners import (
     RunnerCatalogError,
@@ -57,12 +57,12 @@ def _make_tar_gz(
             archive.addfile(member, io.BytesIO(payload))
 
 
-class ExperimentalVariantTests(unittest.TestCase):
+class CompositionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self._experimental_path_patch = patch(
-            "offline_game_vault.experimental.require_bottles_managed_path",
+        self._composition_path_patch = patch(
+            "offline_game_vault.composition.require_bottles_managed_path",
             side_effect=lambda requested=None: Path(requested).resolve(),
         )
         self._adapter_path_patch = patch(
@@ -72,10 +72,10 @@ class ExperimentalVariantTests(unittest.TestCase):
         self._register_patch = patch(
             "offline_game_vault.bottles_adapter.assert_bottle_registered"
         )
-        self._experimental_path_patch.start()
+        self._composition_path_patch.start()
         self._adapter_path_patch.start()
         self._register_patch.start()
-        self.addCleanup(self._experimental_path_patch.stop)
+        self.addCleanup(self._composition_path_patch.stop)
         self.addCleanup(self._adapter_path_patch.stop)
         self.addCleanup(self._register_patch.stop)
         self.collection = self.root / "collection"
@@ -231,7 +231,6 @@ class ExperimentalVariantTests(unittest.TestCase):
                     "id": "linux-direct-wine",
                     "platform": "linux",
                     "adapter": "wine",
-                    "status": "unavailable",
                     "dependencies": ["game-baseline"],
                     "host_contract":
                         "host-contracts/linux-direct-wine.json",
@@ -246,13 +245,11 @@ class ExperimentalVariantTests(unittest.TestCase):
                         "arguments": [],
                         "network": "host_default",
                     },
-                    "notes": "Descriptive status only.",
                 },
                 {
                     "id": "linux-bottles",
                     "platform": "linux",
                     "adapter": "bottles",
-                    "status": "not_tested",
                     "dependencies": ["game-baseline"],
                     "host_contract":
                         "host-contracts/linux-bottles.json",
@@ -266,7 +263,6 @@ class ExperimentalVariantTests(unittest.TestCase):
                         "arguments": [],
                         "network": "isolated",
                     },
-                    "notes": "Descriptive status only.",
                 },
             ],
         }
@@ -362,125 +358,147 @@ class ExperimentalVariantTests(unittest.TestCase):
         family: str = "steamrt4",
         platform_prefix: str = "steamrt4",
     ) -> None:
-        runtime_root = f"engine/xdg-data/umu/{family}"
-        platform_name = f"{platform_prefix}_platform_test"
-        archive = self.root / "umu-backend.tar.gz"
+        backend_archive = self.root / "umu-backend.tar.gz"
         _make_tar_gz(
-            archive,
+            backend_archive,
             directories=(
                 "engine",
                 "engine/python-portable",
                 "engine/python-portable/bin",
                 "engine/umu-portable",
                 "engine/umu-portable/bin",
-                "engine/xdg-data",
-                "engine/xdg-data/umu",
-                runtime_root,
-                f"{runtime_root}/var",
-                f"{runtime_root}/pressure-vessel",
-                f"{runtime_root}/pressure-vessel/bin",
-                f"{runtime_root}/{platform_name}",
-                f"{runtime_root}/{platform_name}/files",
             ),
             entries={
-                "engine/python-portable/bin/python3": (
+                "engine/python-portable/umu-run-fully-local": (
                     b"#!/bin/sh\nexit 0\n",
                     0o755,
                 ),
-                "engine/umu-portable/bin/umu-run": (
+                "engine/umu-portable/bin/umu-run-portable": (
                     b"#!/bin/sh\nexit 0\n",
                     0o755,
                 ),
-                f"{runtime_root}/VERSIONS.txt": (
+            },
+        )
+
+        platform_name = f"{platform_prefix}_platform_test"
+        runtime_archive = self.root / f"{family}-runtime.tar.gz"
+        _make_tar_gz(
+            runtime_archive,
+            directories=(
+                family,
+                f"{family}/var",
+                f"{family}/pressure-vessel",
+                f"{family}/pressure-vessel/bin",
+                f"{family}/{platform_name}",
+                f"{family}/{platform_name}/files",
+            ),
+            entries={
+                f"{family}/VERSIONS.txt": (
                     f"{family}\ttest\n".encode("utf-8"),
                     0o644,
                 ),
-                f"{runtime_root}/_v2-entry-point": (
+                f"{family}/_v2-entry-point": (
                     b"#!/bin/sh\nexit 0\n",
                     0o755,
                 ),
-                f"{runtime_root}/mtree.txt.gz": (
-                    b"mtree",
+                f"{family}/mtree.txt.gz": (b"mtree", 0o644),
+                f"{family}/pressure-vessel/bin/pv-verify": (
+                    b"#!/bin/sh\nexit 0\n",
+                    0o755,
+                ),
+                f"{family}/{platform_name}/files/runtime.bin": (
+                    b"runtime",
                     0o644,
                 ),
-                f"{runtime_root}/pressure-vessel/bin/pv-verify": (
-                    b"#!/bin/sh\nexit 0\n",
-                    0o755,
-                ),
-                f"{runtime_root}/{platform_name}/files/runtime.bin": (
-                    b"runtime",
+                f"{family}/var/runtime-state": (
+                    b"preserved runtime data",
                     0o644,
                 ),
             },
         )
+
         self.backend_object = self._ingest(
-            object_id="umu-stack",
-            archive=archive,
-            roles=["runtime", "backend", "tool"],
+            object_id="umu-backend",
+            archive=backend_archive,
+            roles=["backend", "tool"],
+            shared=True,
+        )
+        self.runtime_object = self._ingest(
+            object_id=f"{family}-runtime",
+            archive=runtime_archive,
+            roles=["runtime"],
             shared=True,
         )
         self._write_inventory()
 
-        template = self.collection / "02_CAPSULES/umu-template"
-        template.mkdir()
-        (template / "host.json").write_text("{}\n", encoding="utf-8")
-        (template / "capsule.json").write_text(
-            json.dumps(
+        inventory_path = self.immutable / "VAULT_INVENTORY.json"
+        inventory = json.loads(
+            inventory_path.read_text(encoding="utf-8")
+        )
+        inventory_objects = inventory.get("objects")
+        self.assertIsInstance(inventory_objects, list)
+
+        for declaration in (
+            self.backend_object,
+            self.runtime_object,
+        ):
+            digest = declaration["digest"]
+            inventory_objects[:] = [
+                item
+                for item in inventory_objects
+                if not (
+                    isinstance(item, dict)
+                    and item.get("digest") == digest
+                )
+            ]
+            inventory_objects.append(
                 {
-                    "schema": 0,
-                    "capsule_id": "umu-template",
-                    "sanitized_fixture": False,
-                    "game": {
-                        "title": "UMU backend template",
-                        "source_store": "Test",
-                        "preserved_version": "1",
-                    },
-                    "documents": {},
-                    "objects": [self.backend_object],
-                    "persistent_state": [],
-                    "profiles": [
-                        {
-                            "id": "linux-umu",
-                            "platform": "linux",
-                            "adapter": "umu",
-                            "status": "verified",
-                            "dependencies": ["umu-stack"],
-                            "host_contract": "host.json",
-                            "launch": {
-                                "entrypoint": "unused",
-                                "network": "host_default",
-                            },
-                            "umu": {
-                                "schema": 0,
-                                "layout": [
-                                    {
-                                        "object": "umu-stack",
-                                        "source": "engine",
-                                        "destination": "engine",
-                                    }
-                                ],
-                                "allowed_absolute_symlinks": [],
-                                "nested_archives": [],
-                                "state_archives": [],
-                                "launchers": [],
-                                "protected_manifests": [],
-                                "symlink_manifests": [],
-                                "mutable_paths": [],
-                                "paths": {
-                                    "launcher": "unused",
-                                    "sanitizer": "unused",
-                                    "runtime_var": (
-                                        f"{runtime_root}/var"
-                                    ),
-                                },
-                            },
-                        }
-                    ],
+                    "bytes": declaration["size"],
+                    "digest": declaration["digest"],
+                    "path": declaration["archive_path"],
                 }
-            ),
+            )
+
+        inventory_path.write_text(
+            json.dumps(inventory),
             encoding="utf-8",
         )
 
+        index_path = self.collection / "INDEX.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        objects = index.get("objects")
+        self.assertIsInstance(objects, list)
+        objects.extend(
+            [
+                {
+                    "capsule_object_id": self.backend_object["id"],
+                    "label": backend_archive.name,
+                    "path": self.backend_object["archive_path"],
+                    "role": "shared-umu-stack",
+                    "sha256": self.backend_object[
+                        "digest"
+                    ].removeprefix("sha256:"),
+                    "size": self.backend_object["size"],
+                },
+                {
+                    "archive_root": family,
+                    "component_id": self.runtime_object["id"],
+                    "label": runtime_archive.name,
+                    "path": self.runtime_object["archive_path"],
+                    "role": "shared-umu-runtime",
+                    "runtime_family": family,
+                    "runtime_version": "test",
+                    "sha256": self.runtime_object[
+                        "digest"
+                    ].removeprefix("sha256:"),
+                    "size": self.runtime_object["size"],
+                },
+            ]
+        )
+        index_path.write_text(
+            json.dumps(index),
+            encoding="utf-8",
+        )
     def test_runner_catalog_hashes_and_classifies_proton(self) -> None:
         runners, warnings = scan_runners(self.collection)
         self.assertEqual(warnings, ())
@@ -504,9 +522,9 @@ class ExperimentalVariantTests(unittest.TestCase):
         ):
             scan_runners(self.collection)
 
-    def test_direct_wine_materializes_even_when_source_is_unavailable(self) -> None:
+    def test_direct_wine_materializes_from_neutral_source(self) -> None:
         destination = self.root / "direct-wine"
-        result = materialize_experimental_wine(
+        result = compose_wine(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
@@ -514,7 +532,6 @@ class ExperimentalVariantTests(unittest.TestCase):
         )
 
         self.assertTrue(result.materialized)
-        self.assertFalse(result.acceptance_inherited)
         self.assertEqual(result.backend, "direct-wine")
         for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
             path = destination / name
@@ -550,18 +567,13 @@ class ExperimentalVariantTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(
-            receipt["experimental_variant"]["kind"],
-            "experimental",
-        )
-        self.assertFalse(
-            receipt["experimental_variant"]["acceptance_inherited"]
-        )
+        self.assertNotIn("composition_composition", receipt)
+        self.assertNotIn("profile_status", receipt)
 
     def test_bottles_installs_and_reuses_only_verified_vault_runner(self) -> None:
         bottles = self.root / "components/bottles"
         bottles.mkdir(parents=True)
-        first = materialize_experimental_bottles(
+        first = compose_bottles(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
@@ -618,7 +630,7 @@ class ExperimentalVariantTests(unittest.TestCase):
             (runner_root / ".ogv-preserved-runner.json").is_file()
         )
 
-        second = materialize_experimental_bottles(
+        second = compose_bottles(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
@@ -631,10 +643,10 @@ class ExperimentalVariantTests(unittest.TestCase):
         wine = runner_root / "files/bin/wine"
         wine.write_bytes(wine.read_bytes() + b"tampered")
         with self.assertRaisesRegex(
-            ExperimentalVariantError,
+            CompositionError,
             "differs from the preserved Vault object",
         ):
-            materialize_experimental_bottles(
+            compose_bottles(
                 collection_root=self.collection,
                 capsule_path=self.capsule_path,
                 runner_id="ge-proton",
@@ -654,10 +666,10 @@ class ExperimentalVariantTests(unittest.TestCase):
             return real_temporary_directory(*args, **kwargs)
 
         with patch(
-            "offline_game_vault.experimental.tempfile.TemporaryDirectory",
+            "offline_game_vault.composition.tempfile.TemporaryDirectory",
             side_effect=tracked,
         ):
-            result = materialize_experimental_bottles(
+            result = compose_bottles(
                 collection_root=self.collection,
                 capsule_path=self.capsule_path,
                 runner_id="ge-proton",
@@ -681,7 +693,7 @@ class ExperimentalVariantTests(unittest.TestCase):
 
         bottles = self.root / "components/bottles"
         bottles.mkdir(parents=True)
-        result = materialize_experimental_bottles(
+        result = compose_bottles(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
@@ -697,10 +709,7 @@ class ExperimentalVariantTests(unittest.TestCase):
                 / ".ogv-bottles-deployment.json"
             ).read_text(encoding="utf-8")
         )
-        self.assertEqual(
-            receipt["experimental_variant"]["source_profile_id"],
-            "linux-direct-wine",
-        )
+        self.assertNotIn("composition_composition", receipt)
 
     def test_direct_wine_synthesizes_from_bottles_neutral_source(self) -> None:
         self.capsule["profiles"] = [
@@ -711,7 +720,7 @@ class ExperimentalVariantTests(unittest.TestCase):
         self._write_capsule()
 
         destination = self.root / "direct-from-bottles"
-        result = materialize_experimental_wine(
+        result = compose_wine(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
@@ -737,7 +746,7 @@ class ExperimentalVariantTests(unittest.TestCase):
         self._add_umu_backend()
 
         destination = self.root / "umu-from-bottles"
-        result = materialize_experimental_umu(
+        result = compose_umu(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
@@ -749,30 +758,34 @@ class ExperimentalVariantTests(unittest.TestCase):
             (destination / "engine/proton/ge-proton/proton").is_file()
         )
 
-    def test_umu_runtime_catalog_rejects_game_specific_backend_object(self) -> None:
+    def test_umu_runtime_catalog_rejects_unregistered_backend(
+        self,
+    ) -> None:
         self._add_umu_backend()
-        template_path = (
-            self.collection / "02_CAPSULES/umu-template/capsule.json"
+        index_path = self.collection / "INDEX.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        for item in index["objects"]:
+            if item.get("role") == "shared-umu-stack":
+                item["role"] = "backend"
+        index_path.write_text(
+            json.dumps(index),
+            encoding="utf-8",
         )
-        document = json.loads(template_path.read_text(encoding="utf-8"))
-        document["objects"][0]["shared"] = False
-        template_path.write_text(json.dumps(document), encoding="utf-8")
 
         self.assertEqual(
             list_shared_umu_runtimes(self.collection),
             (),
         )
         with self.assertRaisesRegex(
-            ExperimentalVariantError,
-            "no complete matching shared runtime",
+            CompositionError,
+            "no matching global UMU component composition",
         ):
-            materialize_experimental_umu(
+            compose_umu(
                 collection_root=self.collection,
                 capsule_path=self.capsule_path,
                 runner_id="ge-proton",
                 destination=self.root / "umu-rejected",
             )
-
     def test_umu_runner_rejects_a_complete_but_wrong_runtime_family(self) -> None:
         self._add_umu_backend(
             family="steamrt3",
@@ -782,59 +795,307 @@ class ExperimentalVariantTests(unittest.TestCase):
         self.assertEqual(len(runtimes), 1)
         self.assertEqual(runtimes[0].runtime_family, "steamrt3")
         with self.assertRaisesRegex(
-            ExperimentalVariantError,
-            r"requires steamrt4 .*no complete matching shared runtime",
+            CompositionError,
+            r"requires steamrt4 .*no matching global UMU component composition",
         ):
-            materialize_experimental_umu(
+            compose_umu(
                 collection_root=self.collection,
                 capsule_path=self.capsule_path,
                 runner_id="ge-proton",
                 destination=self.root / "umu-wrong-family",
             )
 
-    def test_umu_materializes_from_preserved_backend_and_proton(self) -> None:
+    def test_umu_materializes_from_preserved_backend_and_proton(
+        self,
+    ) -> None:
         self._add_umu_backend()
-        runtimes = list_shared_umu_runtimes(self.collection)
-        self.assertEqual(len(runtimes), 1)
-        self.assertTrue(runtimes[0].runtime_id.startswith("umu-runtime-"))
+
+        component_sets = list_shared_umu_runtimes(
+            self.collection
+        )
+
         self.assertEqual(
-            runtimes[0].runtime_var,
+            len(component_sets),
+            1,
+        )
+
+        component_set = component_sets[0]
+
+        self.assertTrue(
+            component_set.component_set_id.startswith(
+                "umu-component-set-"
+            )
+        )
+
+        self.assertEqual(
+            component_set.backend_object_id,
+            "umu-backend",
+        )
+
+        self.assertEqual(
+            component_set.runtime_object_id,
+            "steamrt4-runtime",
+        )
+
+        self.assertEqual(
+            component_set.backend_entrypoint,
+            (
+                "engine/python-portable/"
+                "umu-run-fully-local"
+            ),
+        )
+
+        self.assertEqual(
+            component_set.backend_entrypoint_arguments,
+            (),
+        )
+
+        self.assertIsNone(
+            component_set.backend_pythonpath
+        )
+
+        self.assertEqual(
+            component_set.runtime_var,
             "engine/xdg-data/umu/steamrt4/var",
         )
 
         destination = self.root / "umu"
-        result = materialize_experimental_umu(
+
+        result = compose_umu(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
             destination=destination,
         )
 
-        self.assertTrue(result.materialized)
-        self.assertFalse(result.acceptance_inherited)
-        for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
-            path = destination / name
-            self.assertTrue(path.is_file())
-            self.assertTrue(path.stat().st_mode & 0o100)
         self.assertTrue(
-            (destination / "engine/proton/ge-proton/proton").is_file()
+            result.materialized
         )
+
+        runtime_state = (
+            destination
+            / "engine"
+            / "xdg-data"
+            / "umu"
+            / "steamrt4"
+            / "var"
+            / "runtime-state"
+        )
+
+        self.assertEqual(
+            runtime_state.read_bytes(),
+            b"preserved runtime data",
+        )
+
+        for name in (
+            "JUGAR.sh",
+            "VERIFICAR.sh",
+            "DESINSTALAR.sh",
+        ):
+            path = destination / name
+
+            self.assertTrue(
+                path.is_file()
+            )
+
+            self.assertTrue(
+                path.stat().st_mode & 0o100
+            )
+
         self.assertTrue(
             (
                 destination
-                / "launchers/JUGAR_UMU_EXPERIMENTAL.sh"
+                / "engine"
+                / "proton"
+                / "ge-proton"
+                / "proton"
             ).is_file()
         )
+
+        launcher = (
+            destination
+            / "launchers"
+            / "JUGAR_UMU.sh"
+        )
+
+        self.assertTrue(
+            launcher.is_file()
+        )
+
+        launcher_text = launcher.read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            (
+                'UMU_ENTRYPOINT="$ROOT/'
+                'engine/python-portable/'
+                'umu-run-fully-local"'
+            ),
+            launcher_text,
+        )
+
+        self.assertNotIn(
+            "find ",
+            launcher_text,
+        )
+
+        self.assertNotIn(
+            "composition composition",
+            launcher_text,
+        )
+
+        launched = subprocess.run(
+            [
+                str(launcher),
+            ],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            launched.returncode,
+            0,
+            launched.stderr,
+        )
+
+        mutable_marker = (
+            destination
+            / "engine"
+            / "proton"
+            / "ge-proton"
+            / "files"
+            / "steampipe_fixups_mtime"
+        )
+
+        mutable_marker.write_text(
+            "generated\n",
+            encoding="utf-8",
+        )
+
+        sanitized = subprocess.run(
+            [
+                str(
+                    destination
+                    / "launchers"
+                    / "sanear_umu.sh"
+                ),
+            ],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            sanitized.returncode,
+            0,
+            sanitized.stderr,
+        )
+
+        self.assertFalse(
+            mutable_marker.exists()
+        )
+
+        self.assertEqual(
+            runtime_state.read_bytes(),
+            b"preserved runtime data",
+        )
+
+        verified = subprocess.run(
+            [
+                str(
+                    destination
+                    / "VERIFICAR.sh"
+                ),
+            ],
+            cwd=destination,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            verified.returncode,
+            0,
+            verified.stderr,
+        )
+
+        self.assertEqual(
+            runtime_state.read_bytes(),
+            b"preserved runtime data",
+        )
+
+        backend_result = result.backend_result
+
+        self.assertEqual(
+            backend_result[
+                "component_set_id"
+            ],
+            component_set.component_set_id,
+        )
+
+        self.assertEqual(
+            backend_result[
+                "backend_component_id"
+            ],
+            "umu-backend",
+        )
+
+        self.assertEqual(
+            backend_result[
+                "runtime_component_id"
+            ],
+            "steamrt4-runtime",
+        )
+
+        self.assertEqual(
+            backend_result[
+                "backend_entrypoint"
+            ],
+            (
+                "engine/python-portable/"
+                "umu-run-fully-local"
+            ),
+        )
+
+        self.assertNotIn(
+            "shared_runtime_id",
+            backend_result,
+        )
+
         receipt = json.loads(
-            (destination / "umu-materialization.json").read_text(
+            (
+                destination
+                / "umu-materialization.json"
+            ).read_text(
                 encoding="utf-8"
             )
         )
-        self.assertEqual(
-            receipt["experimental_variant"]["backend"],
-            "umu",
+
+        self.assertNotIn(
+            "composition_composition",
+            receipt,
         )
 
+        self.assertTrue(
+            receipt[
+                "initial_verification"
+            ][
+                "runtime_var_preserved"
+            ]
+        )
 
+        self.assertNotIn(
+            "runtime_var_empty",
+            receipt[
+                "initial_verification"
+            ],
+        )
 if __name__ == "__main__":
     unittest.main()

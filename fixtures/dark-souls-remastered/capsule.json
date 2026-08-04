@@ -94,7 +94,6 @@
   ],
   "profiles": [
     {
-      "acceptance_report": "acceptance.json",
       "adapter": "bottles",
       "dependencies": [
         "dsr-bottle-baseline",
@@ -109,11 +108,9 @@
         "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED"
       },
       "notes": "The verified direct launch used bottles-cli with a dynamically discovered Unix path. The adapter must not hardcode the test host path.",
-      "platform": "linux",
-      "status": "verified"
+      "platform": "linux"
     },
     {
-      "acceptance_report": "acceptance.direct-wine.json",
       "adapter": "wine",
       "dependencies": [
         "dsr-bottle-baseline",
@@ -186,8 +183,7 @@
           }
         ],
         "schema": 0
-      },
-      "status": "verified"
+      }
     },
     {
       "adapter": "windows",
@@ -203,8 +199,7 @@
         "working_directory": "drive_c/Games/DARK_SOULS_REMASTERED"
       },
       "notes": "Placeholder profile. A Windows-specific host contract must be created before this profile can become a candidate.",
-      "platform": "windows",
-      "status": "not_tested"
+      "platform": "windows"
     }
   ],
   "sanitized_fixture": true,

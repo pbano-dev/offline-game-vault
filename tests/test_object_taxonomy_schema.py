@@ -68,7 +68,6 @@ def capsule_fixture() -> dict[str, object]:
                 "id": "test-profile",
                 "platform": "linux",
                 "adapter": "other",
-                "status": "not_tested",
                 "dependencies": ["game-object"],
                 "host_contract": "host-contract.json",
                 "launch": {
@@ -129,31 +128,6 @@ class ObjectTaxonomySchemaTests(unittest.TestCase):
             self.validator.iter_errors(capsule)
         )
         self.assertTrue(errors)
-
-
-    def test_experimental_variant_accepts_shared_runtime_id(self) -> None:
-        capsule = copy.deepcopy(capsule_fixture())
-        capsule["profiles"][0]["variant"] = {
-            "kind": "experimental",
-            "source_profile_id": "source-profile",
-            "backend": "umu",
-            "runner_id": "preserved-proton",
-            "shared_runtime_id": "umu-runtime-example",
-            "acceptance_inherited": False,
-        }
-        self.assert_valid(capsule)
-
-    def test_experimental_variant_keeps_legacy_backend_template_compatible(self) -> None:
-        capsule = copy.deepcopy(capsule_fixture())
-        capsule["profiles"][0]["variant"] = {
-            "kind": "experimental",
-            "source_profile_id": "source-profile",
-            "backend": "umu",
-            "runner_id": "preserved-proton",
-            "backend_template": "legacy-profile-id",
-            "acceptance_inherited": False,
-        }
-        self.assert_valid(capsule)
 
 
 if __name__ == "__main__":

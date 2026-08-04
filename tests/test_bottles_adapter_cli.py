@@ -115,7 +115,6 @@ class BottlesAdapterCliTests(unittest.TestCase):
                             "id": "profile",
                             "platform": "linux",
                             "adapter": "bottles",
-                            "status": "candidate",
                             "dependencies": ["bottle"],
                             "host_contract": "host-contract.json",
                             "launch": {

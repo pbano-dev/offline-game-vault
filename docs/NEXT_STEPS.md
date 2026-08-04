@@ -1,4 +1,4 @@
-# Next steps after the experimental-variant 0.11.3 integration
+# Next steps after the component-composition 0.11.3 integration
 
 This document is public project context. It deliberately excludes private
 collection paths, object digests, save identities, operation IDs, and raw logs.
@@ -30,12 +30,14 @@ Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
 
 ## Completed in 0.11.0
 
-- Added user-requested experimental variants for Bottles, Direct-Wine, and
+- Added user-requested component compositions for Bottles, Direct-Wine, and
   UMU/Proton.
-- Made acceptance and status descriptive rather than authorization gates.
+- Kept acceptance evidence independent and descriptive rather than using it
+  as an authorization gate.
 - Restricted runner selection to SHA-256-verified immutable Vault objects.
 - Added preserved Bottles runner installation and reuse verification.
-- Added automatic composition from shared UMU runtime objects.
+- Added automatic UMU composition from globally registered backend and Steam
+  Linux Runtime components.
 
 
 ## Completed in 0.11.1–0.11.3
@@ -75,11 +77,12 @@ names.
 - Keep the CAS path based only on digest.
 - Audit unreferenced objects through capsules and receipts before deletion.
 
-## Priority 4: profile identifiers
+## Priority 4: historical profile identifiers
 
-A verified profile may retain a historical ID containing `candidate`. Decide
-between immutable IDs with authoritative status or a migration with aliases.
-Never rename an ID directly after it is referenced by state and receipts.
+Private state and receipts may already reference historical profile IDs. Treat
+those IDs as opaque keys and never infer maturity or permission from their
+wording. Any migration must preserve aliases and provenance; an identifier must
+not be renamed in place after state or receipts reference it.
 
 ## Priority 5: GUI integration
 
@@ -89,8 +92,8 @@ The GUI should call core operations and display:
 - immutable objects versus mutable state;
 - required and shared dependencies;
 - external dependencies detected and internalized;
-- clean-restoration status;
-- functional acceptance;
+- clean-restoration evidence;
+- functional test evidence;
 - privacy result;
 - reproducibility versus network containment;
 - publication and catalog status.
@@ -98,8 +101,8 @@ The GUI should call core operations and display:
 The GUI must not embed game-specific paths, hashes, runners, or dependency
 lists. It should obtain preserved runners from the core, while shared UMU
 runtimes are resolved internally by the core, then call
-`materialize-experimental` for user-requested combinations.
-Recommendation and acceptance must remain visible without becoming a hard
+`compose` for user-requested combinations.
+Recommendations and test evidence must remain visible without becoming a
 permission gate.
 
 ## Per-game workflow after DSR

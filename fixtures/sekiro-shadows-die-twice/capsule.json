@@ -122,7 +122,6 @@
   ],
   "profiles": [
     {
-      "acceptance_report": "acceptance.json",
       "adapter": "bottles",
       "dependencies": [
         "sekiro-bottle-baseline",
@@ -137,11 +136,9 @@
         "working_directory": "drive_c/Games/Sekiro"
       },
       "notes": "Clean restoration, restored-save loading, gameplay, normal game exit, and Bottles self-exit were verified. The exact run-bottles child return code was not persisted. Independent external-network denial remains untested.",
-      "platform": "linux",
-      "status": "verified"
+      "platform": "linux"
     },
     {
-      "acceptance_report": "acceptance.direct-wine.json",
       "adapter": "wine",
       "dependencies": [
         "sekiro-bottle-baseline",
@@ -218,8 +215,7 @@
           }
         ],
         "schema": 0
-      },
-      "status": "verified"
+      }
     }
   ],
   "sanitized_fixture": true,

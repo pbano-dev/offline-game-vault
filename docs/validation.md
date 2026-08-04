@@ -11,13 +11,15 @@ The validator checks:
 
 - all JSON Schemas, including vault inventory and persistent-state receipts, are valid Draft 2020-12 schemas;
 - each fixture `capsule.json` validates;
-- host contracts, acceptance reports, and receipts validate;
+- host contracts, independent acceptance reports, and receipts validate;
 - referenced documents and metadata files exist;
 - profile dependencies reference existing object IDs;
 - profile and object IDs are unique;
 - host-contract platforms match their profiles;
-- verified profiles have passing acceptance evidence;
-- orphan contracts and acceptance reports are rejected;
+- every `acceptance*.json` report is schema-validated, privacy-audited, and
+  required to name the fixture capsule;
+- orphan host contracts are rejected, while acceptance reports do not need
+  a profile-side reference;
 - common absolute private-path patterns are rejected in fixture JSON.
 
 This validation does not verify archived payload hashes because commercial
@@ -120,21 +122,25 @@ The UMU suite additionally verifies:
 The test suite uses synthetic objects. Commercial game data, private state, and
 proprietary runtime files are not present in Git.
 
-## Experimental-variant validation in 0.11.0–0.11.2
+## Component-composition validation in 0.11.0–0.11.4
 
-The experimental suite additionally verifies:
+The composition suite additionally verifies:
 
-- profile status does not authorize or prohibit materialization;
-- an `unavailable` neutral source can produce an experimental Direct-Wine
-  variant;
-- Bottles, Direct-Wine, and UMU variants can be synthesized when the exact
-  backend profile is absent but another compatible neutral Linux source exists;
+- neutral source recipes can produce Bottles, Direct-Wine, and UMU
+  compositions when the exact backend recipe is absent;
 - preserved runner discovery checks canonical path, size, and SHA-256;
 - Proton is classified for Bottles, Direct-Wine, and UMU;
 - Bottles installs runners only from immutable Vault archives;
 - a previously installed Bottles runner is reused only while its complete tree
   still verifies;
-- a preserved UMU/Python/Steam Runtime backend can be combined with a separate
-  preserved Proton object;
-- generated backend receipts record `acceptance_inherited: false`;
+- a global UMU/Python backend, a separate Proton runner, and the exact globally
+  registered Steam Linux Runtime can be combined;
+- archived runtime `var` content survives materialization, generated
+  sanitization, and verification;
+- project metadata, package runtime, and the leading changelog release expose
+  the same version;
+- missing, corrupt, unsafe, or incompatible components remain blocking errors;
 - no system runner or network download participates in the synthetic tests.
+
+Independent acceptance reports remain schema-validated evidence. They are not
+profile fields and are not permission gates.

@@ -111,7 +111,6 @@ class StateManagerTests(unittest.TestCase):
                     "id": "linux-wine",
                     "platform": "linux",
                     "adapter": "wine",
-                    "status": "candidate",
                     "dependencies": ["payload"],
                     "host_contract": "host-contract.json",
                     "launch": {
@@ -182,6 +181,18 @@ class StateManagerTests(unittest.TestCase):
             ).iter_errors(document)
         )
         self.assertEqual(errors, [])
+
+    def test_audit_accepts_profile_without_maturity_metadata(
+        self,
+    ) -> None:
+        result = audit_capsule(capsule_path=self.capsule_path)
+        self.assertTrue(result.valid)
+        codes = {issue.code for issue in result.issues}
+        self.assertNotIn("INVALID_PROFILE_STATUS", codes)
+        self.assertNotIn(
+            "VERIFIED_PROFILE_WITHOUT_ACCEPTANCE",
+            codes,
+        )
 
     def test_preserve_verify_and_restore_round_trip(self) -> None:
         self._write_live_state(save=b"original-save", config="old\n")

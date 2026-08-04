@@ -244,9 +244,10 @@ def verify(root: Path) -> dict[str, Any]:
     if (
         runtime_var.is_symlink()
         or not runtime_var.is_dir()
-        or any(runtime_var.iterdir())
     ):
-        raise PortableUmuError("UMU mutable runtime directory is not empty.")
+        raise PortableUmuError(
+            "UMU runtime var directory is absent or linked."
+        )
 
     operational = receipt.get("operational_paths")
     if not isinstance(operational, dict):

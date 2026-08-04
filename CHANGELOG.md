@@ -1,10 +1,28 @@
 # Changelog
 
+## 0.11.4 — 2026-08-03
+### Fixed
+
+- UMU discovery selects one deterministic preserved backend entrypoint and
+  records it in the resolved component set.
+- Generated UMU launchers execute that exact path instead of searching the
+  materialized tree again.
+- Diagnostic JSON and composition results expose backend, Steam Runtime, and
+  `component_set_id` provenance without obsolete runtime or acceptance fields.
+- Regression tests execute `JUGAR_UMU.sh` and both diagnostic output modes.
+- Archived Steam Runtime `var` content is retained in writable derivatives;
+  generated sanitizers remove only explicitly identified regenerable paths.
+- Package metadata, runtime receipts, and `ogv --version` now agree on 0.11.4.
+- ADR 0016 records the rationale for state-free component composition,
+  independent acceptance evidence, deterministic UMU binding, and narrow
+  sanitization.
+
+- Host-side symlink verification now treats only concrete pressure-vessel `runtime_var/tmp-*` roots as container-context paths; broken links elsewhere remain blocking.
 ## 0.11.3 — 2026-08-01
 
 ### Fixed
 
-- Bottles experimental materialization again uses the directory reported by
+- Bottles composition materialization again uses the directory reported by
   `bottles-cli info bottles-path` for every capsule. An optional
   `--bottles-path` value is only an assertion and cannot redirect deployment
   to an arbitrary directory.
@@ -55,7 +73,7 @@
 
 ### Fixed
 
-- Bottles experimental materialization now creates its heavy working tree
+- Bottles composition materialization now creates its heavy working tree
   inside the user-selected managed Bottles directory, not in the host `/tmp`.
 - Direct-Wine and UMU control overlays are also created beside the selected
   destination; backend materializers continue to stage and publish atomically
@@ -86,30 +104,31 @@ All notable project changes are documented here.
 
 ### Added
 
-- User-requested experimental materialization for Bottles, Direct-Wine, and
+- User-requested component composition for Bottles, Direct-Wine, and
   UMU/Proton.
 - Discovery and SHA-256 verification of preserved shared runners.
 - Synthesized operational profiles that leave source capsules unchanged,
   including backend profiles absent from the published capsule when another
   compatible neutral Linux source exists.
-- Preserved UMU backend-template discovery.
-- Optional materialize-and-play execution in the experimental command family.
-- Experimental-variant provenance in backend receipts.
+- Global discovery of preserved UMU/Python backend components.
+- Optional materialize-and-play execution in the composition command family.
+- Composition provenance for the selected source, backend, runner, and
+  resolved runtime where applicable.
 - Vault-derived Bottles runner installation with full-tree reuse validation.
 
 ### Changed
 
-- Profile status and acceptance evidence are descriptive rather than
-  authorization gates.
-- `unavailable`, `candidate`, and `not_tested` profiles may be used as source
-  evidence for a user-requested experimental variant.
+- Profiles are recipes and no longer contain maturity or
+  acceptance-reference fields.
+- Source selection is based on technical compatibility; acceptance evidence
+  remains independent and descriptive.
 - Bottles runner selection no longer falls back to an unverified local
   installation.
 - Project version advanced from `0.10.2` to `0.11.0`.
 
 ### Security
 
-- Experimental variants use only immutable objects already preserved in the
+- Component compositions use only immutable objects already preserved in the
   Vault.
 - Runner objects are checked against their recorded size and SHA-256 before
   selection.
@@ -122,8 +141,9 @@ All notable project changes are documented here.
 
 - Synthetic end-to-end materialization was exercised for Direct-Wine, Bottles,
   and UMU.
-- Tests cover an `unavailable` source profile, runner-object tampering,
-  preserved Bottles runner reuse, UMU backend composition, and CLI parsing.
+- Tests cover synthesis from a neutral source that does not already declare
+  the requested backend, runner-object tampering, preserved Bottles runner
+  reuse, UMU component composition, and CLI parsing.
 
 ## 0.10.2 — 2026-07-31
 

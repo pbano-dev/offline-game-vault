@@ -78,7 +78,6 @@ class MaterializeCliTests(unittest.TestCase):
                             "id": "profile",
                             "platform": "linux",
                             "adapter": "bottles",
-                            "status": "candidate",
                             "dependencies": ["object"],
                             "host_contract": "host-contract.json",
                             "launch": {
