@@ -560,6 +560,7 @@ def compose_wine(
             vault_root=vault_root,
             destination=destination,
             state_backup=state_backup,
+            state_capsule_path=capsule_path,
         )
         played = False
         play_complete: bool | None = None
@@ -802,6 +803,7 @@ def compose_bottles(
                 bottle_name=bottle_name,
                 state_backup=state_backup,
                 require_state_backup=True,
+                state_capsule_path=capsule_path,
             )
             if play:
                 launch_plan, returncode = run_bottles_deployment(
@@ -1856,6 +1858,7 @@ def compose_umu(
             destination=destination,
             state_backup=state_backup,
             require_state_backup=True,
+            state_capsule_path=capsule_path,
         )
         played = False
         play_complete: bool | None = None

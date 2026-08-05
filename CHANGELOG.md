@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.1 — 2026-08-05
+
+### Fixed
+
+- Composition keeps the derived capsule responsible for backend
+  materialization while using the original operational capsule for
+  persistent-state verification and restoration.
+- Bottles, Direct-Wine, and UMU no longer audit an intentionally incomplete
+  temporary overlay when validating `--state-backup`.
+- The state capsule must carry the same `capsule_id` as the derived capsule.
+- Regression tests cover lower-level state routing and all three public
+  composition call sites.
+
 ## 0.12.0 — 2026-08-04
 
 ### Added

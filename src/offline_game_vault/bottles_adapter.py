@@ -1125,10 +1125,16 @@ def deploy_bottles_profile(
     bottle_name: str,
     state_backup: Path | None = None,
     require_state_backup: bool = False,
+    state_capsule_path: Path | None = None,
 ) -> BottlesDeploymentResult:
     """Copy one materialized bottle into Bottles as a mutable derivative."""
 
     capsule_path = capsule_path.expanduser().absolute()
+    state_capsule_path = (
+        capsule_path
+        if state_capsule_path is None
+        else state_capsule_path.expanduser().absolute()
+    )
     materialization = _canonical_existing_directory(
         materialization,
         "Materialization",
@@ -1147,9 +1153,20 @@ def deploy_bottles_profile(
             profile_id=profile_id,
         )
     )
+    state_capsule = _load_json_regular(
+        state_capsule_path,
+        "State capsule",
+    )
+    if (
+        state_capsule.get("capsule_id")
+        != capsule.get("capsule_id")
+    ):
+        raise BottlesAdapterError(
+            "State capsule belongs to another capsule."
+        )
     try:
         state_selection = prepare_composition_state(
-            capsule_path=capsule_path,
+            capsule_path=state_capsule_path,
             state_backup=state_backup,
             require_declared_state=require_state_backup,
         )
@@ -1282,7 +1299,7 @@ def deploy_bottles_profile(
         if state_selection is not None:
             try:
                 state_evidence = restore_composition_state(
-                    capsule_path=capsule_path,
+                    capsule_path=state_capsule_path,
                     state_root=staging,
                     state_root_relative=".",
                     selection=state_selection,

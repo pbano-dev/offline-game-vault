@@ -1608,10 +1608,16 @@ def materialize_umu_profile(
     save_id: str | None = None,
     state_backup: Path | None = None,
     require_state_backup: bool = False,
+    state_capsule_path: Path | None = None,
 ) -> UmuMaterializationResult:
     """Verify, assemble, and atomically publish one UMU materialization."""
 
     capsule_path = capsule_path.expanduser().absolute()
+    state_capsule_path = (
+        capsule_path
+        if state_capsule_path is None
+        else state_capsule_path.expanduser().absolute()
+    )
     capsule_root = capsule_path.parent.resolve()
     vault_root = vault_root.expanduser().resolve()
     destination = _canonical_destination(destination)
@@ -1632,16 +1638,27 @@ def materialize_umu_profile(
     )
     capsule_id = capsule["capsule_id"]
 
+    state_capsule = _load_json(
+        state_capsule_path,
+        "State capsule",
+    )
+    if state_capsule.get("capsule_id") != capsule_id:
+        raise UmuAdapterError(
+            "State capsule belongs to another capsule."
+        )
     try:
         state_selection = prepare_composition_state(
-            capsule_path=capsule_path,
+            capsule_path=state_capsule_path,
             state_backup=state_backup,
             require_declared_state=require_state_backup,
         )
     except CompositionStateError as exc:
         raise UmuAdapterError(str(exc)) from exc
 
-    persistent_state_raw = capsule.get("persistent_state", [])
+    persistent_state_raw = state_capsule.get(
+        "persistent_state",
+        [],
+    )
     if (
         not isinstance(persistent_state_raw, list)
         or any(
@@ -2119,7 +2136,7 @@ def materialize_umu_profile(
 
             try:
                 state_evidence = restore_composition_state(
-                    capsule_path=capsule_path,
+                    capsule_path=state_capsule_path,
                     state_root=generic_prefix,
                     state_root_relative=(
                         generic_prefix_relative.as_posix()
