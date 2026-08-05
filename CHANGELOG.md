@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.2 — 2026-08-05
+### Fixed
+
+- Historical state backups remain verifiable when their declarations form a
+  safe subset of the current capsule definition.
+- Compatibility requires unchanged state IDs, paths, kinds, and sensitivity.
+- Newly added optional state and relaxed required flags no longer invalidate
+  an otherwise intact historical backup.
+- Removed state, changed paths, and newly hardened requirements remain
+  blocking.
+- Restoration applies only declarations represented by the selected receipt;
+  newer optional state is left untouched.
+- Backend compositions use the verified historical receipt item count instead
+  of requiring it to equal the current capsule declaration count.
+
 ## 0.12.1 — 2026-08-05
 
 ### Fixed
