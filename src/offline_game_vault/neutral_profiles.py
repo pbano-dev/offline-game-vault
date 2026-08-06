@@ -325,6 +325,7 @@ def materialize_neutral_bottle_source(
     profile_id: str,
     runner: RunnerRecord,
     bottle_name: str,
+    runner_name: str | None = None,
 ) -> dict[str, Any] | None:
     """Convert only the neutral *object* into a Bottles source derivative.
 
@@ -338,6 +339,12 @@ def materialize_neutral_bottle_source(
     fixtures, but real object-scoped materializations preserve their receipt,
     other dependencies (for example the runner), and ``objects/``.
     """
+
+    # Bottles resolves runners by directory name. That name is normally the
+    # Vault runner id, but a foreign directory already holding it forces an
+    # OGV-namespaced install, and bottle.yml must name the directory that
+    # actually exists.
+    effective_runner = runner_name or runner.runner_id
 
     contract = load_neutral_contract(
         capsule_path,
@@ -451,14 +458,14 @@ def materialize_neutral_bottle_source(
         if template_payload is not None:
             bottle_yml = _sanitize_bottle_yml(
                 template_payload,
-                runner.runner_id,
+                effective_runner,
                 bottle_name,
             )
             template_used = True
         else:
             bottle_yml = _generated_bottle_yml(
                 bottle_name=bottle_name,
-                runner_id=runner.runner_id,
+                runner_id=effective_runner,
                 working_directory=working_directory,
             )
             template_used = False
@@ -475,7 +482,8 @@ def materialize_neutral_bottle_source(
             "schema": 0,
             "contract": "ogv-neutral-bottles-source-v1",
             "profile_id": profile_id,
-            "runner_id": runner.runner_id,
+            "runner_id": effective_runner,
+            "vault_runner_id": runner.runner_id,
             "bottle_name": bottle_name,
             "game_destination_in_prefix":
                 game_destination.as_posix(),

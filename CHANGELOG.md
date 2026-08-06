@@ -30,6 +30,15 @@
   are materialized without copying the payload a second time.
 - A game nested inside the prefix at a location other than
   game_destination_in_prefix remains blocking.
+- Bottles runner deployment resolves before any payload is extracted, so
+  a runner that cannot be used fails in seconds instead of after the
+  whole materialization.
+- A hand-installed Bottles runner that is byte-identical to the preserved
+  object is adopted rather than rejected, and one that differs no longer
+  blocks the composition: the verified copy is installed beside it under
+  an OGV-namespaced name and the generated bottle.yml names it.
+- A Vault-installed runner whose tree no longer matches its marker is
+  still refused; integrity failures are reported, not routed around.
 
 ## 0.12.1 — 2026-08-05
 

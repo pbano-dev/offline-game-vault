@@ -874,8 +874,21 @@ def compose_bottles(
             "The destination must remain outside the Vault collection."
         )
 
+    # Resolving the runner is cheap and can fail for material reasons, so it
+    # happens before tens of gigabytes are extracted rather than after. It
+    # also fixes the directory name Bottles will see, which the generated
+    # bottle.yml must carry.
+    try:
+        installation = ensure_bottles_runner(
+            collection_root,
+            bottles_path,
+            runner,
+        )
+    except (RunnerCatalogError, RunnerDeploymentError) as exc:
+        raise CompositionError(str(exc)) from exc
+
     deployment = None
-    runner_created = False
+    runner_created = installation.created
     play_result = None
     played = False
     play_complete: bool | None = None
@@ -907,20 +920,13 @@ def compose_bottles(
                 profile_id=profile_id,
                 runner=runner,
                 bottle_name=bottle_name,
+                runner_name=installation.name,
             )
             validate_neutral_bottles_source(
                 materialization=raw,
                 capsule_path=operational_capsule,
                 profile_id=profile_id,
             )
-            try:
-                _runner_path, runner_created = ensure_bottles_runner(
-                    collection_root,
-                    bottles_path,
-                    runner,
-                )
-            except (RunnerCatalogError, RunnerDeploymentError) as exc:
-                raise CompositionError(str(exc)) from exc
             deployment = deploy_external_bottles_profile(
                 capsule_path=operational_capsule,
                 profile_id=profile_id,
