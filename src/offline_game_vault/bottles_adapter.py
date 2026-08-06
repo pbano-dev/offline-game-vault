@@ -31,6 +31,11 @@ from .composition_state import (
 DEPLOYMENT_RECEIPT_NAME = ".ogv-bottles-deployment.json"
 DEFAULT_FLATPAK_APP = "com.usebottles.bottles"
 PORTABLE_RUNTIME_DESTINATION = "metadata/ogv_bottles_runtime.py"
+EXTERNAL_PORTABLE_RUNTIME_DESTINATION = (
+    "metadata/ogv_external_bottles_runtime.py"
+)
+EXTERNAL_PREFIX_DESTINATION = "payload/prefix"
+EXTERNAL_GAME_DESTINATION = "payload/game"
 ROOT_LAUNCHER = "JUGAR.sh"
 ROOT_VERIFIER = "VERIFICAR.sh"
 ROOT_UNINSTALLER = "DESINSTALAR.sh"
@@ -43,28 +48,40 @@ _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 def _flatpak_bottles_cli_command(
     *arguments: str,
     flatpak_app: str = DEFAULT_FLATPAK_APP,
+    filesystem_root: Path | None = None,
 ) -> list[str]:
     if not isinstance(flatpak_app, str) or not flatpak_app:
         raise BottlesAdapterError(
             "Flatpak application ID must be a non-empty string."
         )
-    return [
-        "flatpak",
-        "run",
-        "--unshare=network",
-        "--command=bottles-cli",
-        flatpak_app,
-        *arguments,
-    ]
+    command = ["flatpak", "run"]
+    if filesystem_root is not None:
+        root = filesystem_root.expanduser().absolute()
+        if root.is_symlink() or not root.is_dir():
+            raise BottlesAdapterError(
+                "Flatpak filesystem root must be an existing regular directory."
+            )
+        command.append(f"--filesystem={root}")
+    command.extend(
+        [
+            "--unshare=network",
+            "--command=bottles-cli",
+            flatpak_app,
+            *arguments,
+        ]
+    )
+    return command
 
 
 def _run_bottles_cli(
     *arguments: str,
     flatpak_app: str = DEFAULT_FLATPAK_APP,
+    filesystem_root: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = _flatpak_bottles_cli_command(
         *arguments,
         flatpak_app=flatpak_app,
+        filesystem_root=filesystem_root,
     )
     try:
         return subprocess.run(
@@ -242,6 +259,15 @@ def _bottle_names_from_output(output: str) -> tuple[str, ...]:
                     for item in raw
                     if isinstance(item, str) and item.strip()
                 )
+            names.update(
+                key.strip()
+                for key, value in document.items()
+                if (
+                    isinstance(key, str)
+                    and key.strip()
+                    and isinstance(value, dict)
+                )
+            )
         elif isinstance(document, list):
             names.update(
                 item.strip()
@@ -263,6 +289,7 @@ def assert_bottle_registered(
     bottle_name: str,
     *,
     flatpak_app: str = DEFAULT_FLATPAK_APP,
+    filesystem_root: Path | None = None,
 ) -> None:
     """Require Bottles CLI to enumerate a newly published bottle."""
 
@@ -276,6 +303,7 @@ def assert_bottle_registered(
         process = _run_bottles_cli(
             *arguments,
             flatpak_app=flatpak_app,
+            filesystem_root=filesystem_root,
         )
         if process.returncode != 0:
             diagnostics.append(
@@ -1086,6 +1114,80 @@ def _install_operational_scripts(staging: Path) -> dict[str, str]:
     }
 
 
+def _portable_external_bottles_runtime_source() -> str:
+    from . import portable_external_bottles_runtime
+
+    path = Path(portable_external_bottles_runtime.__file__).resolve()
+    if path.is_symlink() or not path.is_file():
+        raise BottlesAdapterError(
+            "Cannot locate the external Bottles runtime source."
+        )
+    return path.read_text(encoding="utf-8")
+
+
+def _external_operational_script(command: str) -> str:
+    if command not in {"play", "verify", "uninstall"}:
+        raise BottlesAdapterError(
+            "Unsupported external operational script command."
+        )
+    return f"""#!/usr/bin/env bash
+set -Eeuo pipefail
+root="$(cd -- "$(dirname -- "${{BASH_SOURCE[0]}}")" && pwd -P)"
+exec "${{PYTHON:-python3}}" \
+  "$root/{EXTERNAL_PORTABLE_RUNTIME_DESTINATION}" \
+  {command} --root "$root" "$@"
+"""
+
+
+def _install_external_operational_scripts(
+    staging: Path,
+) -> dict[str, str]:
+    runtime = staging / EXTERNAL_PORTABLE_RUNTIME_DESTINATION
+    launcher = staging / ROOT_LAUNCHER
+    verifier = staging / ROOT_VERIFIER
+    uninstaller = staging / ROOT_UNINSTALLER
+    _write_operational_file(
+        runtime,
+        _portable_external_bottles_runtime_source(),
+        0o600,
+    )
+    compile(runtime.read_text(encoding="utf-8"), str(runtime), "exec")
+    _write_operational_file(
+        launcher,
+        _external_operational_script("play"),
+        0o700,
+    )
+    _write_operational_file(
+        verifier,
+        _external_operational_script("verify"),
+        0o700,
+    )
+    _write_operational_file(
+        uninstaller,
+        _external_operational_script("uninstall"),
+        0o700,
+    )
+    if shutil.which("bash") is not None:
+        for script in (launcher, verifier, uninstaller):
+            process = subprocess.run(
+                ["bash", "-n", str(script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if process.returncode != 0:
+                raise BottlesAdapterError(
+                    f"Generated shell script is invalid: {script.name}"
+                )
+    return {
+        "launcher": ROOT_LAUNCHER,
+        "verifier": ROOT_VERIFIER,
+        "uninstaller": ROOT_UNINSTALLER,
+        "portable_runtime": EXTERNAL_PORTABLE_RUNTIME_DESTINATION,
+    }
+
+
 def _write_deployment_receipt(
     *,
     staging: Path,
@@ -1407,6 +1509,835 @@ def deploy_bottles_profile(
         if state_snapshot.exists():
             shutil.rmtree(state_snapshot, ignore_errors=True)
         _release_lock(lock, descriptor)
+
+
+def _load_external_bottles_contract(
+    *,
+    capsule_path: Path,
+    profile: dict[str, Any],
+) -> tuple[PurePosixPath, PurePosixPath]:
+    raw = profile.get("host_contract")
+    relative = _safe_relative_path(
+        raw,
+        "profile.host_contract",
+    )
+    capsule_root = capsule_path.parent.resolve(strict=True)
+    current = capsule_root
+    for part in relative.parts:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError as exc:
+            raise BottlesAdapterError(
+                "Bottles host contract is absent."
+            ) from exc
+        if stat.S_ISLNK(info.st_mode):
+            raise BottlesAdapterError(
+                "Bottles host contract traverses a symbolic link."
+            )
+    contract_path = current.resolve(strict=True)
+    try:
+        contract_path.relative_to(capsule_root)
+    except ValueError as exc:
+        raise BottlesAdapterError(
+            "Bottles host contract escapes the capsule."
+        ) from exc
+    contract = _load_json_regular(
+        contract_path,
+        "Bottles host contract",
+    )
+    if contract.get("contract") != "ogv-bottles-neutral-v1":
+        raise BottlesAdapterError(
+            "External Bottles deployment requires "
+            "ogv-bottles-neutral-v1."
+        )
+    game_destination = _safe_relative_path(
+        contract.get("game_destination_in_prefix"),
+        "host_contract.game_destination_in_prefix",
+    )
+    entrypoint_relative = _safe_relative_path(
+        contract.get("entrypoint_relative_to_game"),
+        "host_contract.entrypoint_relative_to_game",
+    )
+    expected_entrypoint = game_destination.joinpath(
+        entrypoint_relative
+    ).as_posix()
+    launch = profile.get("launch")
+    if (
+        not isinstance(launch, dict)
+        or launch.get("entrypoint") != expected_entrypoint
+    ):
+        raise BottlesAdapterError(
+            "Profile entrypoint does not match the neutral contract."
+        )
+    return game_destination, entrypoint_relative
+
+
+def _new_external_destination(
+    destination: Path,
+    *,
+    bottles_path: Path,
+) -> Path:
+    expanded = destination.expanduser().absolute()
+    if expanded.exists() or expanded.is_symlink():
+        raise BottlesAdapterError(
+            f"External Bottles destination already exists: {expanded}"
+        )
+    parent = expanded.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise BottlesAdapterError(
+            "External Bottles destination parent must be "
+            "an existing regular directory."
+        )
+    parent = parent.resolve(strict=True)
+    target = parent / expanded.name
+    if target.name in {"", ".", ".."}:
+        raise BottlesAdapterError(
+            "External Bottles destination name is invalid."
+        )
+    if target == Path(target.anchor) or target == Path.home().resolve():
+        raise BottlesAdapterError(
+            "External Bottles destination is unsafe."
+        )
+    try:
+        target.relative_to(bottles_path)
+    except ValueError:
+        pass
+    else:
+        raise BottlesAdapterError(
+            "External Bottles destination must remain outside "
+            "the managed Bottles directory."
+        )
+    return target
+
+
+def _registration_matches(
+    registration: Path,
+    expected: Path,
+) -> bool:
+    if not registration.is_symlink():
+        return False
+    try:
+        return (
+            registration.resolve(strict=True)
+            == expected.resolve(strict=True)
+        )
+    except OSError:
+        return False
+
+
+def _create_external_registration(
+    *,
+    registration: Path,
+    target: Path,
+) -> None:
+    if registration.exists() or registration.is_symlink():
+        raise BottlesAdapterError(
+            "Bottles registration name already exists."
+        )
+    try:
+        registration.symlink_to(
+            target,
+            target_is_directory=True,
+        )
+    except FileExistsError as exc:
+        raise BottlesAdapterError(
+            "Bottles registration appeared concurrently."
+        ) from exc
+    except OSError as exc:
+        raise BottlesAdapterError(
+            f"Cannot create Bottles registration: {exc}"
+        ) from exc
+
+
+def deploy_external_bottles_profile(
+    *,
+    capsule_path: Path,
+    profile_id: str,
+    materialization: Path,
+    destination: Path,
+    bottles_path: Path,
+    bottle_name: str,
+    state_backup: Path | None = None,
+    require_state_backup: bool = False,
+    state_capsule_path: Path | None = None,
+) -> BottlesDeploymentResult:
+    """Publish one Bottles derivative at a user-selected external root."""
+
+    capsule_path = capsule_path.expanduser().absolute()
+    state_capsule_path = (
+        capsule_path
+        if state_capsule_path is None
+        else state_capsule_path.expanduser().absolute()
+    )
+    materialization = _canonical_existing_directory(
+        materialization,
+        "Materialization",
+    )
+    bottle_name = _validate_bottle_name(bottle_name)
+    bottles_path = require_bottles_managed_path(bottles_path)
+    if not os.access(bottles_path, os.W_OK):
+        raise BottlesAdapterError(
+            "Bottles managed path is not writable."
+        )
+    target = _new_external_destination(
+        destination,
+        bottles_path=bottles_path,
+    )
+    if not os.access(target.parent, os.W_OK):
+        raise BottlesAdapterError(
+            "External Bottles destination parent is not writable."
+        )
+
+    capsule, profile, bottle_object, persistent_state = (
+        _load_capsule_profile(
+            capsule_path=capsule_path,
+            profile_id=profile_id,
+        )
+    )
+    game_destination, entrypoint_relative = (
+        _load_external_bottles_contract(
+            capsule_path=capsule_path,
+            profile=profile,
+        )
+    )
+    state_capsule = _load_json_regular(
+        state_capsule_path,
+        "State capsule",
+    )
+    if state_capsule.get("capsule_id") != capsule.get("capsule_id"):
+        raise BottlesAdapterError(
+            "State capsule belongs to another capsule."
+        )
+    try:
+        state_selection = prepare_composition_state(
+            capsule_path=state_capsule_path,
+            state_backup=state_backup,
+            require_declared_state=require_state_backup,
+        )
+    except CompositionStateError as exc:
+        raise BottlesAdapterError(str(exc)) from exc
+
+    capsule_id = capsule["capsule_id"]
+    object_id = bottle_object.get("id")
+    if not isinstance(object_id, str) or not object_id:
+        raise BottlesAdapterError(
+            "Bottle object ID must be a non-empty string."
+        )
+    materialization_receipt = _load_materialization_receipt(
+        materialization=materialization,
+        capsule_id=capsule_id,
+        profile_id=profile_id,
+        object_id=object_id,
+    )
+    materialization_receipt_id = materialization_receipt.get(
+        "receipt_id"
+    )
+    if (
+        not isinstance(materialization_receipt_id, str)
+        or not materialization_receipt_id
+    ):
+        raise BottlesAdapterError(
+            "Materialization receipt_id must be a non-empty string."
+        )
+
+    object_root = materialization / "objects" / object_id
+    if object_root.is_symlink() or not object_root.is_dir():
+        raise BottlesAdapterError(
+            "Materialized bottle object root is not a regular directory."
+        )
+    source = _find_bottle_root(object_root)
+    source_fields = _read_top_level_bottle_fields(
+        source / "bottle.yml"
+    )
+    runner = source_fields["Runner"]
+    assert isinstance(runner, str)
+
+    source_game = source.joinpath(*game_destination.parts)
+    source_entrypoint = source_game.joinpath(
+        *entrypoint_relative.parts
+    )
+    if source_game.is_symlink() or not source_game.is_dir():
+        raise BottlesAdapterError(
+            "Neutral Bottles game source is not a regular directory."
+        )
+    if (
+        source_entrypoint.is_symlink()
+        or not source_entrypoint.is_file()
+    ):
+        raise BottlesAdapterError(
+            "Profile entrypoint is not a regular file in the "
+            "materialized bottle."
+        )
+
+    launch = profile["launch"]
+    network = launch.get("network", "host_default")
+    arguments = tuple(launch.get("arguments", []))
+    registration = bottles_path / bottle_name
+    if registration.exists() or registration.is_symlink():
+        raise BottlesAdapterError(
+            f"Bottles registration already exists: {bottle_name}"
+        )
+
+    source_manifest, source_summary = _tree_manifest(source)
+    free_bytes = shutil.disk_usage(target.parent).free
+    if source_summary.regular_bytes > free_bytes:
+        raise BottlesAdapterError(
+            "Insufficient free space for external Bottles deployment: "
+            f"required {source_summary.regular_bytes}, "
+            f"available {free_bytes}."
+        )
+
+    lock, descriptor = _acquire_lock(bottles_path, bottle_name)
+    staging = target.parent / (
+        f".ogv-stage-external-bottles-{target.name}-"
+        f"{os.getpid()}-{secrets.token_hex(8)}"
+    )
+    state_snapshot = target.parent / (
+        f".ogv-state-snapshot-{target.name}-"
+        f"{os.getpid()}-{secrets.token_hex(8)}"
+    )
+    published = False
+    registered = False
+    promoted = False
+    state_evidence = None
+
+    try:
+        if target.exists() or target.is_symlink():
+            raise BottlesAdapterError(
+                "External Bottles destination appeared concurrently."
+            )
+        if registration.exists() or registration.is_symlink():
+            raise BottlesAdapterError(
+                "Bottles registration appeared concurrently."
+            )
+
+        prefix = staging / EXTERNAL_PREFIX_DESTINATION
+        game = staging / EXTERNAL_GAME_DESTINATION
+        prefix.parent.mkdir(parents=True, mode=0o700)
+        try:
+            shutil.copytree(
+                source,
+                prefix,
+                symlinks=True,
+                copy_function=shutil.copy2,
+            )
+        except OSError as exc:
+            raise BottlesAdapterError(
+                f"Cannot copy materialized bottle: {exc}"
+            ) from exc
+
+        staged_manifest, staged_source_summary = _tree_manifest(prefix)
+        if source_manifest != staged_manifest:
+            raise BottlesAdapterError(
+                "Staged prefix does not match materialized source."
+            )
+
+        _rewrite_bottle_identity(
+            bottle_yml=prefix / "bottle.yml",
+            bottle_name=bottle_name,
+        )
+        staged_fields = _read_top_level_bottle_fields(
+            prefix / "bottle.yml"
+        )
+        if (
+            staged_fields["Name"] != bottle_name
+            or staged_fields["Path"] != bottle_name
+            or staged_fields["Custom_Path"] is not False
+            or staged_fields["Runner"] != runner
+        ):
+            raise BottlesAdapterError(
+                "Staged bottle identity verification failed."
+            )
+
+        if state_selection is not None:
+            try:
+                state_evidence = restore_composition_state(
+                    capsule_path=state_capsule_path,
+                    state_root=prefix,
+                    state_root_relative=EXTERNAL_PREFIX_DESTINATION,
+                    selection=state_selection,
+                    snapshot=state_snapshot,
+                    evidence_root=staging / "receipts/state",
+                    evidence_relative="receipts/state",
+                )
+            except CompositionStateError as exc:
+                raise BottlesAdapterError(str(exc)) from exc
+
+        prefix_game = prefix.joinpath(*game_destination.parts)
+        if prefix_game.is_symlink() or not prefix_game.is_dir():
+            raise BottlesAdapterError(
+                "Game payload disappeared from the staged prefix."
+            )
+        game.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(prefix_game, game)
+        relative_target = os.path.relpath(
+            game,
+            start=prefix_game.parent,
+        )
+        prefix_game.symlink_to(
+            relative_target,
+            target_is_directory=True,
+        )
+        deployed_entrypoint = game.joinpath(
+            *entrypoint_relative.parts
+        )
+        if (
+            deployed_entrypoint.is_symlink()
+            or not deployed_entrypoint.is_file()
+        ):
+            raise BottlesAdapterError(
+                "External game entrypoint is absent after publication."
+            )
+
+        receipt_state: list[dict[str, Any]] = []
+        for index, item in enumerate(persistent_state):
+            item_id = item.get("id")
+            item_path = item.get("path")
+            if not isinstance(item_id, str) or not item_id:
+                raise BottlesAdapterError(
+                    f"persistent_state[{index}].id is invalid."
+                )
+            _safe_relative_path(
+                item_path,
+                f"persistent_state[{index}].path",
+            )
+            receipt_state.append(
+                {
+                    "id": item_id,
+                    "path": item_path,
+                    "preserve_on_remove": bool(item.get("backup")),
+                    "sensitive": bool(item.get("sensitive")),
+                }
+            )
+
+        operational_paths = _install_external_operational_scripts(
+            staging
+        )
+        _, deployed_summary = _tree_manifest(staging)
+        deployment_id = str(uuid.uuid4())
+        entrypoint = (
+            PurePosixPath(EXTERNAL_GAME_DESTINATION)
+            .joinpath(entrypoint_relative)
+            .as_posix()
+        )
+        receipt = {
+            "schema": 0,
+            "deployment_id": deployment_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "orchestrator_version": __version__,
+            "adapter": "bottles-flatpak",
+            "capsule_id": capsule_id,
+            "profile_id": profile_id,
+            "materialization_receipt_id": materialization_receipt_id,
+            "source_object_id": object_id,
+            "bottle_name": bottle_name,
+            "destination": ".",
+            "runner": runner,
+            "layout": {
+                "kind": "external-wrapper-v1",
+                "prefix": EXTERNAL_PREFIX_DESTINATION,
+                "game": EXTERNAL_GAME_DESTINATION,
+                "registration_target": EXTERNAL_PREFIX_DESTINATION,
+                "game_destination_in_prefix":
+                    game_destination.as_posix(),
+            },
+            "launch": {
+                "entrypoint": entrypoint,
+                "arguments": list(arguments),
+                "network": network,
+            },
+            "operational_paths": operational_paths,
+            "source_tree_sha256": source_summary.digest,
+            "deployed_tree_sha256": deployed_summary.digest,
+            "persistent_state": receipt_state,
+            "removal": {
+                "requires_stopped_confirmation": True,
+                "must_preserve": [
+                    item["path"]
+                    for item in receipt_state
+                    if item["preserve_on_remove"]
+                ],
+            },
+        }
+        if state_evidence is not None:
+            receipt["state_restore"] = state_evidence.to_dict()
+
+        _write_deployment_receipt(
+            staging=staging,
+            document=receipt,
+        )
+        _fsync_tree(staging)
+        _rename_noreplace(staging, target)
+        published = True
+
+        registration_target = (
+            target / EXTERNAL_PREFIX_DESTINATION
+        )
+        _create_external_registration(
+            registration=registration,
+            target=registration_target,
+        )
+        registered = True
+        assert_bottle_registered(
+            bottle_name,
+            filesystem_root=target,
+        )
+        promoted = True
+
+        return BottlesDeploymentResult(
+            schema=0,
+            deployment_id=deployment_id,
+            capsule_id=capsule_id,
+            profile_id=profile_id,
+            bottle_name=bottle_name,
+            source_object_id=object_id,
+            runner=runner,
+            entrypoint=entrypoint,
+            network=network,
+            source_tree_sha256=source_summary.digest,
+            deployed_tree_sha256=deployed_summary.digest,
+            regular_bytes=staged_source_summary.regular_bytes,
+            file_count=staged_source_summary.file_count,
+            directory_count=staged_source_summary.directory_count,
+            symlink_count=staged_source_summary.symlink_count,
+            complete=True,
+        )
+    finally:
+        if not promoted:
+            if registered and _registration_matches(
+                registration,
+                target / EXTERNAL_PREFIX_DESTINATION,
+            ):
+                registration.unlink(missing_ok=True)
+            if staging.exists() and not staging.is_symlink():
+                shutil.rmtree(staging, ignore_errors=True)
+            if published and target.exists() and not target.is_symlink():
+                shutil.rmtree(target, ignore_errors=True)
+        if state_snapshot.exists() and not state_snapshot.is_symlink():
+            shutil.rmtree(state_snapshot, ignore_errors=True)
+        _release_lock(lock, descriptor)
+
+
+def _external_deployment(
+    *,
+    destination: Path,
+    bottles_path: Path | None,
+    flatpak_app: str,
+    require_registration: bool,
+) -> tuple[
+    Path,
+    Path,
+    Path,
+    dict[str, Any],
+    str,
+]:
+    root = _canonical_existing_directory(
+        destination,
+        "External Bottles materialization",
+    )
+    receipt = _load_deployment_receipt(
+        target=root,
+        bottle_name=str(
+            _load_json_regular(
+                root / DEPLOYMENT_RECEIPT_NAME,
+                "Bottles deployment receipt",
+            ).get("bottle_name", "")
+        ),
+    )
+    layout = receipt.get("layout")
+    if (
+        not isinstance(layout, dict)
+        or layout.get("kind") != "external-wrapper-v1"
+    ):
+        raise BottlesAdapterError(
+            "Deployment is not an external Bottles materialization."
+        )
+    prefix_relative = _safe_relative_path(
+        layout.get("prefix"),
+        "deployment.layout.prefix",
+    )
+    game_relative = _safe_relative_path(
+        layout.get("game"),
+        "deployment.layout.game",
+    )
+    registration_relative = _safe_relative_path(
+        layout.get("registration_target"),
+        "deployment.layout.registration_target",
+    )
+    prefix = root.joinpath(*prefix_relative.parts)
+    game = root.joinpath(*game_relative.parts)
+    registration_target = root.joinpath(
+        *registration_relative.parts
+    )
+    if registration_target != prefix:
+        raise BottlesAdapterError(
+            "Registration target does not match external prefix."
+        )
+    if prefix.is_symlink() or not prefix.is_dir():
+        raise BottlesAdapterError(
+            "External Bottles prefix is absent."
+        )
+    if game.is_symlink() or not game.is_dir():
+        raise BottlesAdapterError(
+            "External Bottles game payload is absent."
+        )
+
+    managed = require_bottles_managed_path(
+        bottles_path,
+        flatpak_app=flatpak_app,
+    )
+    bottle_name = _validate_bottle_name(receipt["bottle_name"])
+    registration = managed / bottle_name
+    if require_registration and not _registration_matches(
+        registration,
+        registration_target,
+    ):
+        raise BottlesAdapterError(
+            "External Bottles registration is absent or targets "
+            "another materialization."
+        )
+    return root, prefix, registration, receipt, bottle_name
+
+
+def verify_external_bottles_deployment(
+    *,
+    destination: Path,
+    bottles_path: Path | None = None,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> BottlesDeploymentVerification:
+    root, prefix, _registration, receipt, bottle_name = (
+        _external_deployment(
+            destination=destination,
+            bottles_path=bottles_path,
+            flatpak_app=flatpak_app,
+            require_registration=True,
+        )
+    )
+    try:
+        verify_composition_state_evidence(
+            root=root,
+            evidence=receipt.get("state_restore"),
+            capsule_id=receipt["capsule_id"],
+        )
+    except CompositionStateError as exc:
+        raise BottlesAdapterError(
+            f"Invalid state restoration evidence: {exc}"
+        ) from exc
+
+    fields = _read_top_level_bottle_fields(
+        prefix / "bottle.yml"
+    )
+    configuration_valid = (
+        fields["Name"] == bottle_name
+        and fields["Path"] == bottle_name
+        and fields["Custom_Path"] is False
+        and fields["Runner"] == receipt["runner"]
+    )
+    launch = receipt["launch"]
+    entrypoint_path = _safe_relative_path(
+        launch["entrypoint"],
+        "deployment.launch.entrypoint",
+    )
+    entrypoint = root.joinpath(*entrypoint_path.parts)
+    entrypoint_present = (
+        not entrypoint.is_symlink()
+        and entrypoint.is_file()
+    )
+
+    operational = receipt.get("operational_paths")
+    operational_scripts_valid = isinstance(operational, dict)
+    if operational_scripts_valid:
+        for key in (
+            "launcher",
+            "verifier",
+            "uninstaller",
+            "portable_runtime",
+        ):
+            value = operational.get(key)
+            try:
+                relative = _safe_relative_path(
+                    value,
+                    f"deployment.operational_paths.{key}",
+                )
+            except BottlesAdapterError:
+                operational_scripts_valid = False
+                break
+            path = root.joinpath(*relative.parts)
+            if path.is_symlink() or not path.is_file():
+                operational_scripts_valid = False
+                break
+            if key != "portable_runtime" and not os.access(
+                path,
+                os.X_OK,
+            ):
+                operational_scripts_valid = False
+                break
+
+    verified = (
+        configuration_valid
+        and entrypoint_present
+        and operational_scripts_valid
+    )
+    return BottlesDeploymentVerification(
+        schema=0,
+        deployment_id=receipt["deployment_id"],
+        capsule_id=receipt["capsule_id"],
+        profile_id=receipt["profile_id"],
+        bottle_name=bottle_name,
+        runner=receipt["runner"],
+        entrypoint=launch["entrypoint"],
+        network=launch["network"],
+        receipt_valid=True,
+        configuration_valid=configuration_valid,
+        entrypoint_present=entrypoint_present,
+        operational_scripts_valid=operational_scripts_valid,
+        verified=verified,
+    )
+
+
+def build_external_bottles_launch_plan(
+    *,
+    destination: Path,
+    bottles_path: Path | None = None,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> tuple[BottlesLaunchPlan, tuple[str, ...]]:
+    root, _prefix, registration, receipt, bottle_name = (
+        _external_deployment(
+            destination=destination,
+            bottles_path=bottles_path,
+            flatpak_app=flatpak_app,
+            require_registration=False,
+        )
+    )
+    layout = receipt["layout"]
+    registration_target_relative = _safe_relative_path(
+        layout["registration_target"],
+        "deployment.layout.registration_target",
+    )
+    registration_target = root.joinpath(
+        *registration_target_relative.parts
+    )
+    if registration.is_symlink():
+        if not _registration_matches(
+            registration,
+            registration_target,
+        ):
+            raise BottlesAdapterError(
+                "Bottle name is registered to another materialization."
+            )
+    elif registration.exists():
+        raise BottlesAdapterError(
+            "Bottle name collides with a managed directory."
+        )
+    else:
+        _create_external_registration(
+            registration=registration,
+            target=registration_target,
+        )
+
+    assert_bottle_registered(
+        bottle_name,
+        flatpak_app=flatpak_app,
+        filesystem_root=root,
+    )
+    verification = verify_external_bottles_deployment(
+        destination=root,
+        bottles_path=registration.parent,
+        flatpak_app=flatpak_app,
+    )
+    if not verification.verified:
+        raise BottlesAdapterError(
+            "External Bottles deployment is not verified."
+        )
+
+    launch = receipt["launch"]
+    entrypoint_relative = _safe_relative_path(
+        launch["entrypoint"],
+        "deployment.launch.entrypoint",
+    )
+    executable = root.joinpath(*entrypoint_relative.parts)
+    command: list[str] = [
+        "flatpak",
+        "run",
+        f"--filesystem={root}",
+    ]
+    if launch["network"] == "isolated":
+        command.append("--unshare=network")
+    command.extend(
+        [
+            "--command=bottles-cli",
+            flatpak_app,
+            "run",
+            "-b",
+            bottle_name,
+            "-e",
+            str(executable),
+        ]
+    )
+    arguments = tuple(launch.get("arguments", []))
+    if arguments:
+        command.append("--")
+        command.extend(arguments)
+
+    display_command = [
+        "flatpak",
+        "run",
+        "--filesystem=<MATERIALIZATION_ROOT>",
+    ]
+    if launch["network"] == "isolated":
+        display_command.append("--unshare=network")
+    display_command.extend(
+        [
+            "--command=bottles-cli",
+            flatpak_app,
+            "run",
+            "-b",
+            bottle_name,
+            "-e",
+            f"<MATERIALIZATION_ROOT>/{launch['entrypoint']}",
+        ]
+    )
+    if arguments:
+        display_command.append("--")
+        display_command.extend(arguments)
+
+    plan = BottlesLaunchPlan(
+        schema=0,
+        deployment_id=receipt["deployment_id"],
+        capsule_id=receipt["capsule_id"],
+        profile_id=receipt["profile_id"],
+        bottle_name=bottle_name,
+        entrypoint=launch["entrypoint"],
+        network=launch["network"],
+        flatpak_app=flatpak_app,
+        command=tuple(display_command),
+    )
+    return plan, tuple(command)
+
+
+def run_external_bottles_deployment(
+    *,
+    destination: Path,
+    bottles_path: Path | None = None,
+    flatpak_app: str = DEFAULT_FLATPAK_APP,
+) -> tuple[BottlesLaunchPlan, int]:
+    plan, command = build_external_bottles_launch_plan(
+        destination=destination,
+        bottles_path=bottles_path,
+        flatpak_app=flatpak_app,
+    )
+    try:
+        completed = subprocess.run(command, check=False)
+    except FileNotFoundError as exc:
+        raise BottlesAdapterError(
+            "flatpak executable was not found."
+        ) from exc
+    except OSError as exc:
+        raise BottlesAdapterError(
+            f"Cannot launch Bottles Flatpak: {exc}"
+        ) from exc
+    return plan, int(completed.returncode)
 
 
 def _deployment_target(

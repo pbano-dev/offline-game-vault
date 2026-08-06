@@ -1382,6 +1382,10 @@ def _command_compose(args: argparse.Namespace) -> int:
             arguments=forwarded,
         )
     else:
+        if args.destination is None:
+            raise CompositionError(
+                "--destination is required for Bottles."
+            )
         if not args.bottle_name:
             raise CompositionError(
                 "--bottle-name is required for Bottles."
@@ -1392,6 +1396,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             )
         result = compose_bottles(
             **common,
+            destination=args.destination,
             bottles_path=args.bottles_path,
             bottle_name=args.bottle_name,
             state_backup=args.state_backup,
@@ -2362,7 +2367,7 @@ def build_parser() -> argparse.ArgumentParser:
     composition_parser.add_argument(
         "--destination",
         type=Path,
-        help="New destination for Direct-Wine or UMU.",
+        help="New external materialization destination.",
     )
     composition_parser.add_argument(
         "--state-backup",

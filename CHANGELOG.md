@@ -14,6 +14,15 @@
   newer optional state is left untouched.
 - Backend compositions use the verified historical receipt item count instead
   of requiring it to equal the current capsule declaration count.
+- Bottles composition now requires and publishes to the requested external
+  destination instead of copying the derivative into the private Bottles tree.
+- The managed Bottles directory stores only a guarded, rebuildable symlink to
+  the external `payload/prefix`; game and prefix data are not duplicated.
+- Generated Bottles play, verify, and uninstall operations live at the
+  external root and grant Flatpak access per invocation without persistent
+  overrides.
+- Bottles composition results report the selected external destination, and
+  removal refuses foreign registrations, other bottles, and runners.
 
 ## 0.12.1 — 2026-08-05
 

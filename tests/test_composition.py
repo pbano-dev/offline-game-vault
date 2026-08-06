@@ -573,15 +573,22 @@ class CompositionTests(unittest.TestCase):
     def test_bottles_installs_and_reuses_only_verified_vault_runner(self) -> None:
         bottles = self.root / "components/bottles"
         bottles.mkdir(parents=True)
+        first_root = self.root / "external-first"
         first = compose_bottles(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
+            destination=first_root,
             bottles_path=bottles,
             bottle_name="First",
         )
         self.assertTrue(first.materialized)
-        first_root = bottles / "First"
+        self.assertEqual(Path(first.destination), first_root)
+        self.assertTrue((bottles / "First").is_symlink())
+        self.assertEqual(
+            (bottles / "First").resolve(),
+            (first_root / "payload/prefix").resolve(),
+        )
         for name in ("JUGAR.sh", "VERIFICAR.sh", "DESINSTALAR.sh"):
             path = first_root / name
             self.assertTrue(path.is_file())
@@ -605,6 +612,7 @@ class CompositionTests(unittest.TestCase):
         environment["PATH"] = str(fake_bin) + os.pathsep + environment.get(
             "PATH", ""
         )
+        environment["PYTHON"] = "/usr/bin/python3"
         verified_script = subprocess.run(
             [str(first_root / "VERIFICAR.sh"), "--json"],
             cwd=first_root,
@@ -616,7 +624,7 @@ class CompositionTests(unittest.TestCase):
         )
         self.assertEqual(verified_script.returncode, 0, verified_script.stderr)
         played_script = subprocess.run(
-            [str(first_root / "JUGAR.sh"), "--json"],
+            [str(first_root / "JUGAR.sh")],
             cwd=first_root,
             env=environment,
             stdout=subprocess.PIPE,
@@ -634,6 +642,7 @@ class CompositionTests(unittest.TestCase):
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
+            destination=self.root / "external-second",
             bottles_path=bottles,
             bottle_name="Second",
         )
@@ -650,6 +659,7 @@ class CompositionTests(unittest.TestCase):
                 collection_root=self.collection,
                 capsule_path=self.capsule_path,
                 runner_id="ge-proton",
+                destination=self.root / "external-third",
                 bottles_path=bottles,
                 bottle_name="Third",
             )
@@ -665,6 +675,7 @@ class CompositionTests(unittest.TestCase):
             parents.append(Path(raw) if raw is not None else None)
             return real_temporary_directory(*args, **kwargs)
 
+        destination = self.root / "external-staging"
         with patch(
             "offline_game_vault.composition.tempfile.TemporaryDirectory",
             side_effect=tracked,
@@ -673,14 +684,18 @@ class CompositionTests(unittest.TestCase):
                 collection_root=self.collection,
                 capsule_path=self.capsule_path,
                 runner_id="ge-proton",
+                destination=destination,
                 bottles_path=bottles,
                 bottle_name="StagingTest",
             )
 
         self.assertTrue(result.materialized)
-        self.assertEqual(parents, [bottles.resolve()])
+        self.assertEqual(parents, [destination.parent.resolve()])
         self.assertFalse(
-            any(path.name.startswith(".ogv-work-") for path in bottles.iterdir())
+            any(
+                path.name.startswith(".ogv-work-")
+                for path in destination.parent.iterdir()
+            )
         )
 
     def test_bottles_synthesizes_from_direct_wine_neutral_source(self) -> None:
@@ -693,10 +708,12 @@ class CompositionTests(unittest.TestCase):
 
         bottles = self.root / "components/bottles"
         bottles.mkdir(parents=True)
+        destination = self.root / "external-synthesized"
         result = compose_bottles(
             collection_root=self.collection,
             capsule_path=self.capsule_path,
             runner_id="ge-proton",
+            destination=destination,
             bottles_path=bottles,
             bottle_name="Synthesized",
         )
@@ -704,10 +721,12 @@ class CompositionTests(unittest.TestCase):
         self.assertTrue(result.materialized)
         receipt = json.loads(
             (
-                bottles
-                / "Synthesized"
-                / ".ogv-bottles-deployment.json"
+                destination / ".ogv-bottles-deployment.json"
             ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            receipt["layout"]["kind"],
+            "external-wrapper-v1",
         )
         self.assertNotIn("composition_composition", receipt)
 
