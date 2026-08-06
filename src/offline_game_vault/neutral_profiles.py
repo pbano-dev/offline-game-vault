@@ -197,42 +197,6 @@ def _copy_game(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=True)
 
 
-def _place_game(
-    *,
-    prefix: Path,
-    game: Path,
-    destination: Path,
-    game_destination: PurePosixPath,
-) -> bool:
-    """Ensure the game payload sits at its declared place inside the bottle.
-
-    Neutral objects keep a clean prefix and the game payload as disjoint
-    subtrees, so the game is copied in. Historical full-prefix archives already
-    contain the game inside the prefix; the tree copy above therefore already
-    placed it, and copying again would both duplicate tens of gigabytes and
-    collide with itself. Returns ``True`` when the payload was copied.
-    """
-    resolved_prefix = prefix.resolve(strict=True)
-    resolved_game = game.resolve(strict=True)
-    try:
-        nested = resolved_game.relative_to(resolved_prefix)
-    except ValueError:
-        _copy_game(game, destination)
-        return True
-
-    if PurePosixPath(nested.as_posix()) != game_destination:
-        raise NeutralProfileError(
-            "the archived game lives inside the prefix at a different "
-            "location than game_destination_in_prefix"
-        )
-    if destination.is_symlink() or not destination.is_dir():
-        raise NeutralProfileError(
-            "the archived prefix does not contain the game at "
-            "game_destination_in_prefix"
-        )
-    return False
-
-
 def _sanitize_bottle_yml(
     payload: str,
     runner_id: str,
@@ -426,11 +390,9 @@ def materialize_neutral_bottle_source(
     staging.mkdir(mode=0o700)
     try:
         _copy_tree_contents(prefix, staging)
-        _place_game(
-            prefix=prefix,
-            game=game,
-            destination=staging.joinpath(*game_destination.parts),
-            game_destination=game_destination,
+        _copy_game(
+            game,
+            staging.joinpath(*game_destination.parts),
         )
 
         template_raw = document.get("bottle_yml_template")
