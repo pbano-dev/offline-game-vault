@@ -23,6 +23,13 @@
   overrides.
 - Bottles composition results report the selected external destination, and
   removal refuses foreign registrations, other bottles, and runners.
+- Bottles accepts historical capsules whose only Linux source is a
+  playable Wine profile, deriving the neutral fields from the recorded
+  layout instead of requiring a neutral host contract.
+- Archived full-prefix objects whose game already sits inside the prefix
+  are materialized without copying the payload a second time.
+- A game nested inside the prefix at a location other than
+  game_destination_in_prefix remains blocking.
 
 ## 0.12.1 — 2026-08-05
 
