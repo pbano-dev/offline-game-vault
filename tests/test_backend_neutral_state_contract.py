@@ -46,11 +46,7 @@ class BackendNeutralStateContractTests(unittest.TestCase):
             backend=backend,
             runner="synthetic-runner",
             source_profile=None,
-            destination=(
-                self.destination
-                if backend in {"direct-wine", "umu"}
-                else None
-            ),
+            destination=self.destination,
             state_backup=self.state_backup,
             bottles_path=(
                 self.bottles_path
@@ -93,6 +89,10 @@ class BackendNeutralStateContractTests(unittest.TestCase):
         self.assertEqual(
             mocked.call_args.kwargs.get("state_backup"),
             self.state_backup,
+        )
+        self.assertEqual(
+            mocked.call_args.kwargs.get("destination"),
+            self.destination,
         )
 
     def test_cli_forwards_state_backup_to_umu(self) -> None:

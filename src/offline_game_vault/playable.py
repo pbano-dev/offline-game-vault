@@ -756,10 +756,16 @@ def materialize_playable_profile(
     vault_root: Path,
     destination: Path,
     state_backup: Path | None = None,
+    state_capsule_path: Path | None = None,
 ) -> PlayableMaterializationResult:
     """Build, restore, verify, and atomically publish a playable profile."""
 
     capsule_path = capsule_path.expanduser().absolute()
+    state_capsule_path = (
+        capsule_path
+        if state_capsule_path is None
+        else state_capsule_path.expanduser().absolute()
+    )
     vault_root = vault_root.expanduser().resolve()
     destination = _canonical_destination(destination)
     capsule, profile, contract = _profile_and_contract(
@@ -770,6 +776,14 @@ def materialize_playable_profile(
     if not isinstance(capsule_id, str) or not capsule_id:
         raise PlayableError("Capsule has no valid capsule_id.")
 
+    state_capsule = _load_json(
+        state_capsule_path,
+        "State capsule",
+    )
+    if state_capsule.get("capsule_id") != capsule_id:
+        raise PlayableError(
+            "State capsule belongs to another capsule."
+        )
     try:
         destination.relative_to(vault_root)
     except ValueError:
@@ -785,7 +799,7 @@ def materialize_playable_profile(
             contract=contract,
         )
 
-    state_declarations = _state_declarations(capsule)
+    state_declarations = _state_declarations(state_capsule)
     state_verification = None
     if state_declarations:
         if state_backup is None:
@@ -795,7 +809,7 @@ def materialize_playable_profile(
             )
         try:
             state_verification = verify_state_backup(
-                capsule_path=capsule_path,
+                capsule_path=state_capsule_path,
                 backup=state_backup,
             )
         except StateError as exc:
@@ -870,7 +884,7 @@ def materialize_playable_profile(
             prefix_path = _path_under(stage, contract.prefix)
             try:
                 restore_result = restore_state(
-                    capsule_path=capsule_path,
+                    capsule_path=state_capsule_path,
                     state_root=prefix_path,
                     backup=state_backup,
                     snapshot=snapshot,

@@ -62,6 +62,34 @@
       ],
       "type": "object"
     },
+    "layout": {
+      "additionalProperties": false,
+      "properties": {
+        "game": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "game_destination_in_prefix": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "kind": {
+          "const": "external-wrapper-v1"
+        },
+        "prefix": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "registration_target": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "required": [
+        "kind",
+        "prefix",
+        "game",
+        "registration_target",
+        "game_destination_in_prefix"
+      ],
+      "type": "object"
+    },
     "materialization_receipt_id": {
       "format": "uuid",
       "type": "string"
@@ -164,47 +192,47 @@
     "state_restore": {
       "additionalProperties": false,
       "properties": {
-        "schema": {
-          "const": 0
-        },
         "backup_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "snapshot_backup_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "item_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "restored_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "missing_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "state_root": {
-          "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "type": "string"
         },
         "baseline_receipt": {
-          "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "type": "string"
         },
         "baseline_receipt_sha256": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
-        },
-        "restore_receipt": {
-          "type": "string",
-          "minLength": 1
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
         },
         "complete": {
           "const": true
+        },
+        "item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restore_receipt": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "restored_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema": {
+          "const": 0
+        },
+        "snapshot_backup_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "state_root": {
+          "minLength": 1,
+          "type": "string"
         }
       },
       "required": [

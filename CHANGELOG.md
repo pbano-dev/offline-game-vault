@@ -1,5 +1,89 @@
 # Changelog
 
+## 0.13.0 — 2026-08-08
+
+### Added
+
+- Per-object content manifests: for every preserved object, a text manifest
+  lists each contained file with its SHA-256 digest, so a materialization
+  can be verified without consulting the Vault it was extracted from.
+  Layout: ``01_IMMUTABLE_VAULT/manifests/sha256/<aa>/<bb>/<hex>`` with a
+  ``<hex>.sha256`` sidecar.
+- ``generate-object-manifest`` computes the manifest for one preserved
+  object in capsule or direct mode, verifying the object bytes before
+  writing anything.
+- ``generate-missing-manifests`` walks the Vault and ensures every object
+  has a valid manifest, deriving the archive format from capsule
+  declarations or from ``INDEX.json`` labels for shared components
+  (runners, backends, UMU runtimes).
+- ``ingest-object`` automatically generates the per-object manifest on
+  successful ingest. Capsule mode reads the format from the capsule;
+  direct mode accepts a new ``--format`` argument. ``--no-manifest``
+  skips the manifest step for bulk ingestion or deferred generation.
+
+### Changed
+
+- ``--format`` in ``ingest-object`` capsule mode must agree with the
+  capsule's declared format; a mismatch aborts the ingest with an
+  explicit conflict error before anything reaches the Vault.
+- Manifest failures during ingest are surfaced as warnings and JSON
+  fields without invalidating the ingest itself: the object is in the
+  Vault, its manifest can be generated later with
+  ``generate-object-manifest`` or ``generate-missing-manifests``.
+
+## 0.12.2 — 2026-08-05
+### Fixed
+
+- Historical state backups remain verifiable when their declarations form a
+  safe subset of the current capsule definition.
+- Compatibility requires unchanged state IDs, paths, kinds, and sensitivity.
+- Newly added optional state and relaxed required flags no longer invalidate
+  an otherwise intact historical backup.
+- Removed state, changed paths, and newly hardened requirements remain
+  blocking.
+- Restoration applies only declarations represented by the selected receipt;
+  newer optional state is left untouched.
+- Backend compositions use the verified historical receipt item count instead
+  of requiring it to equal the current capsule declaration count.
+- Bottles composition now requires and publishes to the requested external
+  destination instead of copying the derivative into the private Bottles tree.
+- The managed Bottles directory stores only a guarded, rebuildable symlink to
+  the external `payload/prefix`; game and prefix data are not duplicated.
+- Generated Bottles play, verify, and uninstall operations live at the
+  external root and grant Flatpak access per invocation without persistent
+  overrides.
+- Bottles composition results report the selected external destination, and
+  removal refuses foreign registrations, other bottles, and runners.
+- Bottles accepts historical capsules whose only Linux source is a
+  playable Wine profile, deriving the neutral fields from the recorded
+  layout instead of requiring a neutral host contract.
+- Archived full-prefix objects whose game already sits inside the prefix
+  are materialized without copying the payload a second time.
+- A game nested inside the prefix at a location other than
+  game_destination_in_prefix remains blocking.
+- Bottles runner deployment resolves before any payload is extracted, so
+  a runner that cannot be used fails in seconds instead of after the
+  whole materialization.
+- A hand-installed Bottles runner that is byte-identical to the preserved
+  object is adopted rather than rejected, and one that differs no longer
+  blocks the composition: the verified copy is installed beside it under
+  an OGV-namespaced name and the generated bottle.yml names it.
+- A Vault-installed runner whose tree no longer matches its marker is
+  still refused; integrity failures are reported, not routed around.
+
+## 0.12.1 — 2026-08-05
+
+### Fixed
+
+- Composition keeps the derived capsule responsible for backend
+  materialization while using the original operational capsule for
+  persistent-state verification and restoration.
+- Bottles, Direct-Wine, and UMU no longer audit an intentionally incomplete
+  temporary overlay when validating `--state-backup`.
+- The state capsule must carry the same `capsule_id` as the derived capsule.
+- Regression tests cover lower-level state routing and all three public
+  composition call sites.
+
 ## 0.12.0 — 2026-08-04
 
 ### Added

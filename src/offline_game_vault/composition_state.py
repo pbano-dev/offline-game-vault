@@ -142,16 +142,16 @@ def prepare_composition_state(
             "State backup must be a regular directory."
         )
 
-    if verification.item_count != item_count:
+    if verification.item_count > item_count:
         raise CompositionStateError(
-            "Verified state backup does not cover every "
-            "preservable state declaration."
+            "Verified state backup contains more items than the "
+            "current capsule declares."
         )
 
     return CompositionStateSelection(
         backup=backup,
         backup_id=verification.backup_id,
-        item_count=item_count,
+        item_count=verification.item_count,
     )
 
 

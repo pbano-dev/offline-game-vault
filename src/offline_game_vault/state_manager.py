@@ -2193,6 +2193,139 @@ def _validate_backup_item(
     )
 
 
+def _backup_declarations_for_receipt(
+    *,
+    document: dict[str, Any],
+    declarations: tuple[StateDeclaration, ...],
+    definition_digest: str,
+) -> tuple[StateDeclaration, ...]:
+    # Resolve exact or safely compatible declarations for a receipt.
+
+    items = document.get("items")
+    if not isinstance(items, list):
+        raise StateError("State backup items must be an array.")
+
+    current = tuple(
+        declaration
+        for declaration in declarations
+        if declaration.backup
+    )
+    receipt_digest = document.get("state_definition_digest")
+    if (
+        not isinstance(receipt_digest, str)
+        or not _DIGEST_PATTERN.fullmatch(receipt_digest)
+    ):
+        raise StateError(
+            "State backup has an invalid state definition digest."
+        )
+
+    if receipt_digest == definition_digest:
+        if len(items) != len(current):
+            raise StateError(
+                "State backup item count does not match the capsule."
+            )
+        item_ids = [
+            item.get("id")
+            for item in items
+            if isinstance(item, dict)
+        ]
+        if item_ids != [declaration.id for declaration in current]:
+            raise StateError(
+                "State backup item order or IDs do not match "
+                "the capsule."
+            )
+        return current
+
+    current_by_id = {
+        declaration.id: declaration
+        for declaration in current
+    }
+    seen: set[str] = set()
+    compatible: list[StateDeclaration] = []
+    item_ids: list[str] = []
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise StateError(
+                f"State backup item {index} must be an object."
+            )
+        item_id = item.get("id")
+        if (
+            not isinstance(item_id, str)
+            or not _ID_PATTERN.fullmatch(item_id)
+        ):
+            raise StateError(
+                f"State backup item {index} has no valid ID."
+            )
+        if item_id in seen:
+            raise StateError(
+                f"State backup item ID is duplicated: {item_id}."
+            )
+        seen.add(item_id)
+        item_ids.append(item_id)
+
+        declaration = current_by_id.get(item_id)
+        if declaration is None:
+            raise StateError(
+                f"Historical backup item {item_id} is no longer "
+                "declared for backup."
+            )
+
+        for field, expected in (
+            ("declared_path", declaration.path),
+            ("kind", declaration.kind),
+            ("sensitive", declaration.sensitive),
+        ):
+            if item.get(field) != expected:
+                raise StateError(
+                    f"Historical backup item {item_id} does not "
+                    f"match the current capsule {field}."
+                )
+
+        historical_required = item.get("required")
+        if not isinstance(historical_required, bool):
+            raise StateError(
+                f"Historical backup item {item_id} has invalid "
+                "required metadata."
+            )
+        if declaration.required and not historical_required:
+            raise StateError(
+                f"Historical backup item {item_id} was optional "
+                "but is required by the current capsule."
+            )
+
+        compatible.append(
+            StateDeclaration(
+                id=declaration.id,
+                path=declaration.path,
+                kind=declaration.kind,
+                backup=True,
+                sensitive=declaration.sensitive,
+                required=historical_required,
+            )
+        )
+
+    if item_ids != sorted(item_ids):
+        raise StateError(
+            "Historical backup item order is not canonical."
+        )
+
+    omitted_required = [
+        declaration.id
+        for declaration in current
+        if declaration.required and declaration.id not in seen
+    ]
+    if omitted_required:
+        raise StateError(
+            "Historical backup omits state now required by "
+            "the capsule: "
+            + ", ".join(sorted(omitted_required))
+            + "."
+        )
+
+    return tuple(compatible)
+
+
 def _load_and_verify_backup(
     *,
     capsule_id: str,
@@ -2240,12 +2373,6 @@ def _load_and_verify_backup(
         raise StateError("State backup has no valid backup_id.")
     if document.get("capsule_id") != capsule_id:
         raise StateError("State backup capsule_id does not match.")
-    if document.get(
-        "state_definition_digest"
-    ) != definition_digest:
-        raise StateError(
-            "State backup definition does not match the capsule."
-        )
     if document.get("backup_kind") not in {
         "preserved",
         "pre_restore_snapshot",
@@ -2262,20 +2389,11 @@ def _load_and_verify_backup(
     if not isinstance(items, list):
         raise StateError("State backup items must be an array.")
 
-    selected = tuple(item for item in declarations if item.backup)
-    if len(items) != len(selected):
-        raise StateError(
-            "State backup item count does not match the capsule."
-        )
-    item_ids = [
-        item.get("id")
-        for item in items
-        if isinstance(item, dict)
-    ]
-    if item_ids != [item.id for item in selected]:
-        raise StateError(
-            "State backup item order or IDs do not match the capsule."
-        )
+    selected = _backup_declarations_for_receipt(
+        document=document,
+        declarations=declarations,
+        definition_digest=definition_digest,
+    )
 
     allowed_top_level = {
         BACKUP_RECEIPT_NAME,
@@ -2907,7 +3025,15 @@ def restore_state(
 
     backup_items = _receipt_item_index(backup_document)
     snapshot_items = _receipt_item_index(snapshot_document)
-    selected = tuple(item for item in declarations if item.backup)
+    current_by_id = {
+        declaration.id: declaration
+        for declaration in declarations
+        if declaration.backup
+    }
+    selected = tuple(
+        current_by_id[item["id"]]
+        for item in backup_document["items"]
+    )
 
     restore_id = f"state-restore-{uuid.uuid4()}"
     modified: list[StateDeclaration] = []

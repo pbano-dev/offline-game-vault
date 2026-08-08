@@ -197,6 +197,42 @@ def _copy_game(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=True)
 
 
+def _place_game(
+    *,
+    prefix: Path,
+    game: Path,
+    destination: Path,
+    game_destination: PurePosixPath,
+) -> bool:
+    """Ensure the game payload sits at its declared place inside the bottle.
+
+    Neutral objects keep a clean prefix and the game payload as disjoint
+    subtrees, so the game is copied in. Historical full-prefix archives already
+    contain the game inside the prefix; the tree copy above therefore already
+    placed it, and copying again would both duplicate tens of gigabytes and
+    collide with itself. Returns ``True`` when the payload was copied.
+    """
+    resolved_prefix = prefix.resolve(strict=True)
+    resolved_game = game.resolve(strict=True)
+    try:
+        nested = resolved_game.relative_to(resolved_prefix)
+    except ValueError:
+        _copy_game(game, destination)
+        return True
+
+    if PurePosixPath(nested.as_posix()) != game_destination:
+        raise NeutralProfileError(
+            "the archived game lives inside the prefix at a different "
+            "location than game_destination_in_prefix"
+        )
+    if destination.is_symlink() or not destination.is_dir():
+        raise NeutralProfileError(
+            "the archived prefix does not contain the game at "
+            "game_destination_in_prefix"
+        )
+    return False
+
+
 def _sanitize_bottle_yml(
     payload: str,
     runner_id: str,
@@ -289,6 +325,7 @@ def materialize_neutral_bottle_source(
     profile_id: str,
     runner: RunnerRecord,
     bottle_name: str,
+    runner_name: str | None = None,
 ) -> dict[str, Any] | None:
     """Convert only the neutral *object* into a Bottles source derivative.
 
@@ -302,6 +339,12 @@ def materialize_neutral_bottle_source(
     fixtures, but real object-scoped materializations preserve their receipt,
     other dependencies (for example the runner), and ``objects/``.
     """
+
+    # Bottles resolves runners by directory name. That name is normally the
+    # Vault runner id, but a foreign directory already holding it forces an
+    # OGV-namespaced install, and bottle.yml must name the directory that
+    # actually exists.
+    effective_runner = runner_name or runner.runner_id
 
     contract = load_neutral_contract(
         capsule_path,
@@ -390,9 +433,11 @@ def materialize_neutral_bottle_source(
     staging.mkdir(mode=0o700)
     try:
         _copy_tree_contents(prefix, staging)
-        _copy_game(
-            game,
-            staging.joinpath(*game_destination.parts),
+        _place_game(
+            prefix=prefix,
+            game=game,
+            destination=staging.joinpath(*game_destination.parts),
+            game_destination=game_destination,
         )
 
         template_raw = document.get("bottle_yml_template")
@@ -413,14 +458,14 @@ def materialize_neutral_bottle_source(
         if template_payload is not None:
             bottle_yml = _sanitize_bottle_yml(
                 template_payload,
-                runner.runner_id,
+                effective_runner,
                 bottle_name,
             )
             template_used = True
         else:
             bottle_yml = _generated_bottle_yml(
                 bottle_name=bottle_name,
-                runner_id=runner.runner_id,
+                runner_id=effective_runner,
                 working_directory=working_directory,
             )
             template_used = False
@@ -437,7 +482,8 @@ def materialize_neutral_bottle_source(
             "schema": 0,
             "contract": "ogv-neutral-bottles-source-v1",
             "profile_id": profile_id,
-            "runner_id": runner.runner_id,
+            "runner_id": effective_runner,
+            "vault_runner_id": runner.runner_id,
             "bottle_name": bottle_name,
             "game_destination_in_prefix":
                 game_destination.as_posix(),

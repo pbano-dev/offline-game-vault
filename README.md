@@ -15,7 +15,7 @@ object verification and content-addressed ingestion
 profile verification and deterministic inventory
 safe staged materialization and guarded removal
 capsule-driven direct-Wine materialization
-Bottles managed mutable deployment and execution
+Bottles external materialization with rebuildable registration
 generic persistent-state backup, verification, restoration, and rollback
 UMU/Proton materialization with exact archived dependencies
 user-requested component compositions from preserved Vault pieces
@@ -87,5 +87,12 @@ records the selected baseline identity and restoration evidence.
 Bottles, Direct-Wine, and UMU derivatives all publish `JUGAR.sh`,
 `VERIFICAR.sh`, and `DESINSTALAR.sh` at their root. The GUI uses these scripts
 after materialization instead of reconstructing backend launch commands.
+
+For Bottles compositions, the requested destination is the authoritative
+external root. `payload/game` and `payload/prefix` remain there; the managed
+Bottles directory contains only a rebuildable registration symlink. Generated
+operations grant the Bottles Flatpak access to that root per invocation and do
+not create a persistent override or duplicate the game and prefix.
+
 UMU refuses incomplete preserved runtimes and launches with network isolation;
 it never downloads a missing Steam Linux Runtime.

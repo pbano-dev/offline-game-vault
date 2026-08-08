@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -296,15 +297,145 @@ def _validate_existing_runner(destination: Path, runner: RunnerRecord) -> None:
     if runner.proton_path:
         _resolved_payload(destination, runner.proton_path, "Proton launcher")
 
+
+@dataclass(frozen=True, slots=True)
+class BottlesRunnerInstallation:
+    """Where a preserved runner ended up inside the Bottles component tree.
+
+    ``name`` is the directory name Bottles will see, which is also the value
+    written to the generated ``bottle.yml``. It is normally the Vault runner
+    id, but a foreign directory already occupying that name forces an
+    OGV-namespaced sibling instead.
+    """
+
+    path: Path
+    name: str
+    created: bool
+    adopted: bool = False
+
+
+def _namespaced_runner_id(runner: RunnerRecord) -> str:
+    """Deterministic name for a runner that cannot own its plain directory."""
+    raw = str(runner.digest).removeprefix("sha256:")
+    return f"{runner.runner_id}-ogv-{raw[:12]}"
+
+
+def _expected_tree_digest(
+    runner: RunnerRecord,
+    archive: Path,
+) -> str | None:
+    """Tree digest the preserved archive produces once extracted."""
+    with tempfile.TemporaryDirectory(prefix=".ogv-runner-probe-") as temporary:
+        extraction = Path(temporary) / "extract"
+        extraction.mkdir(mode=0o700)
+        try:
+            if runner.format == "zip":
+                _extract_zip(archive, extraction, runner.source_root)
+            elif runner.format in {"tar", "tar.gz", "tar.zst"}:
+                _extract_tar(
+                    archive,
+                    extraction,
+                    runner.source_root,
+                    Path(temporary),
+                    zstd_compressed=(runner.format == "tar.zst"),
+                )
+            else:
+                return None
+            source_root = extraction / runner.source_root
+            if source_root.is_symlink() or not source_root.is_dir():
+                return None
+            return _tree_digest(source_root)
+        except RunnerDeploymentError:
+            return None
+
+
+def _adopt_foreign_runner(
+    destination: Path,
+    runner: RunnerRecord,
+    archive: Path,
+) -> bool:
+    """Claim a foreign directory that is byte-identical to the Vault object.
+
+    Bottles users install runners by hand. When such a tree hashes exactly to
+    the preserved object under the same digest function used at installation
+    time, it is indistinguishable from one the Vault installed, so recording
+    the marker states a verified fact rather than introducing a new trust
+    assumption. Nothing in the tree is modified beyond adding the marker.
+
+    Returns ``True`` when the directory was adopted.
+    """
+    marker = destination / _MARKER_NAME
+    if marker.exists() or marker.is_symlink():
+        # Present but invalid: this is a different object, not an unclaimed
+        # one, and silently rewriting the marker would erase that evidence.
+        return False
+    try:
+        _resolved_payload(destination, runner.wine_path, "Wine executable")
+        _resolved_payload(
+            destination,
+            runner.wineserver_path,
+            "Wineserver executable",
+        )
+        if runner.proton_path:
+            _resolved_payload(destination, runner.proton_path, "Proton launcher")
+        actual = _tree_digest(destination)
+    except RunnerDeploymentError:
+        return False
+
+    expected = _expected_tree_digest(runner, archive)
+    if expected is None or actual != expected:
+        return False
+
+    try:
+        marker.write_text(
+            json.dumps(
+                _marker_payload(runner, actual),
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        marker.chmod(0o600)
+    except OSError:
+        return False
+    return True
+
+
+def _resolve_runner_archive(
+    collection_root: Path,
+    runner: RunnerRecord,
+) -> Path:
+    immutable_root = Path(collection_root).resolve(strict=True) / (
+        "01_IMMUTABLE_VAULT"
+    )
+    archive_relative = _safe_member(
+        runner.archive_path,
+        "runner archive path",
+    )
+    archive = immutable_root.joinpath(*archive_relative.parts)
+    try:
+        archive = archive.resolve(strict=True)
+        archive.relative_to(immutable_root.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise RunnerDeploymentError(
+            "The preserved runner archive is unavailable"
+        ) from exc
+    return archive
+
+
 def ensure_bottles_runner(
     collection_root: Path,
     bottles_path: Path,
     runner: RunnerRecord,
-) -> tuple[Path, bool]:
+) -> BottlesRunnerInstallation:
     """Install one preserved runner into Bottles without network access.
 
-    Returns ``(destination, created)``. Existing regular runner directories
-    are left untouched and are validated by the normal Bottles inventory.
+    A directory already installed by the Vault and still matching its marker
+    is reused. A foreign directory occupying the same name is never
+    overwritten: it is adopted when it hashes to the preserved object, and
+    otherwise the verified copy is installed beside it under an
+    OGV-namespaced name. Selecting a technically valid runner therefore never
+    fails because of what the user installed by hand.
     """
     try:
         validate_runner_record(collection_root, runner)
@@ -323,35 +454,56 @@ def ensure_bottles_runner(
             "Bottles runners directory is outside the components root"
         )
 
-    destination = runners_root / runner.runner_id
+    archive = _resolve_runner_archive(collection_root, runner)
+
+    name = runner.runner_id
+    destination = runners_root / name
     if destination.is_symlink():
         raise RunnerDeploymentError(
             "The selected Bottles runner destination is a symlink"
         )
     if destination.is_dir():
-        destination = destination.resolve(strict=True)
-        _validate_existing_runner(destination, runner)
-        return destination, False
+        resolved = destination.resolve(strict=True)
+        marker = resolved / _MARKER_NAME
+        if marker.is_symlink() or marker.exists():
+            # The Vault claimed this directory. If the claim no longer holds
+            # the tree was tampered with or belongs to another object, and
+            # quietly installing a copy elsewhere would hide that. Integrity
+            # failures are reported, never routed around.
+            _validate_existing_runner(resolved, runner)
+            return BottlesRunnerInstallation(
+                path=resolved,
+                name=name,
+                created=False,
+            )
+        # Unclaimed directory: the user installed it by hand.
+        if _adopt_foreign_runner(resolved, runner, archive):
+            return BottlesRunnerInstallation(
+                path=resolved,
+                name=name,
+                created=False,
+                adopted=True,
+            )
+        # The name is taken by something that is not this object. Install the
+        # verified copy beside it instead of overwriting the user's directory.
+        name = _namespaced_runner_id(runner)
+        destination = runners_root / name
+        if destination.is_symlink():
+            raise RunnerDeploymentError(
+                "The namespaced Bottles runner destination is a symlink"
+            )
+        if destination.is_dir():
+            resolved = destination.resolve(strict=True)
+            _validate_existing_runner(resolved, runner)
+            return BottlesRunnerInstallation(
+                path=resolved,
+                name=name,
+                created=False,
+            )
     if destination.exists():
         raise RunnerDeploymentError(
             "The selected Bottles runner destination already exists"
         )
-
-    immutable_root = Path(collection_root).resolve(strict=True) / (
-        "01_IMMUTABLE_VAULT"
-    )
-    archive_relative = _safe_member(
-        runner.archive_path,
-        "runner archive path",
-    )
-    archive = immutable_root.joinpath(*archive_relative.parts)
-    try:
-        archive = archive.resolve(strict=True)
-        archive.relative_to(immutable_root.resolve(strict=True))
-    except (OSError, ValueError) as exc:
-        raise RunnerDeploymentError(
-            "The preserved runner archive is unavailable"
-        ) from exc
 
     staging_parent = Path(
         tempfile.mkdtemp(
@@ -406,7 +558,11 @@ def ensure_bottles_runner(
         )
         marker.chmod(0o600)
         os.replace(source_root, destination)
-        return destination.resolve(strict=True), True
+        return BottlesRunnerInstallation(
+            path=destination.resolve(strict=True),
+            name=name,
+            created=True,
+        )
     except FileExistsError as exc:
         raise RunnerDeploymentError(
             "Runner destination appeared during installation"

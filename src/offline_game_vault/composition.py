@@ -25,9 +25,9 @@ import zipfile
 from . import __version__
 from .bottles_adapter import (
     BottlesAdapterError,
-    deploy_bottles_profile,
+    deploy_external_bottles_profile,
     require_bottles_managed_path,
-    run_bottles_deployment,
+    run_external_bottles_deployment,
 )
 from .composition_profile import (
     DerivedCapsule,
@@ -361,6 +361,7 @@ _SOURCE_PRIORITIES: dict[str, dict[str, int]] = {
         "ogv-bottles-neutral-v1": 0,
         "ogv-direct-wine-neutral-v1": 1,
         "ogv-umu-neutral-v1": 2,
+        "playable-wine": 3,
     },
     "umu": {
         "ogv-umu-neutral-v1": 0,
@@ -560,6 +561,7 @@ def compose_wine(
             vault_root=vault_root,
             destination=destination,
             state_backup=state_backup,
+            state_capsule_path=capsule_path,
         )
         played = False
         play_complete: bool | None = None
@@ -588,6 +590,96 @@ def compose_wine(
     )
 
 
+def _strip_prefix_root(value: Any, prefix: str, label: str) -> PurePosixPath:
+    """Rebase a playable path such as ``prefix/drive_c/...`` on the prefix."""
+    relative = _safe_relative(value, label)
+    root = _safe_relative(prefix, "playable.paths.prefix")
+    try:
+        return PurePosixPath(relative.relative_to(root))
+    except ValueError as exc:
+        raise CompositionError(
+            f"{label} is not located inside the playable prefix."
+        ) from exc
+
+
+def _neutral_fields_from_playable(profile: dict[str, Any]) -> dict[str, str]:
+    """Derive neutral-contract fields from a historical playable Wine profile.
+
+    Legacy capsules describe a full Bottles archive whose single top-level
+    directory already *is* the Wine prefix, with the game installed inside it.
+    Neutral contracts describe the same material declaratively, so the mapping
+    is total and requires no new evidence: profiles are recipes, and a recipe
+    that Direct-Wine and UMU can already read must also be readable by Bottles
+    (ADR 0015, ADR 0016).
+    """
+    playable = profile.get("playable")
+    launch = profile.get("launch")
+    if not isinstance(playable, dict) or not isinstance(launch, dict):
+        raise CompositionError(
+            "The playable Wine source profile has no launch or playable block."
+        )
+
+    paths = playable.get("paths")
+    if not isinstance(paths, dict):
+        raise CompositionError("The playable Wine profile declares no paths.")
+    prefix = paths.get("prefix")
+    if not isinstance(prefix, str) or not prefix:
+        raise CompositionError("The playable Wine profile declares no prefix.")
+
+    layout = playable.get("layout")
+    if not isinstance(layout, list):
+        raise CompositionError("The playable Wine profile declares no layout.")
+    prefix_entries = [
+        item
+        for item in layout
+        if isinstance(item, dict) and item.get("destination") == prefix
+    ]
+    if len(prefix_entries) != 1:
+        raise CompositionError(
+            "The playable Wine layout has no unique prefix object."
+        )
+    entry = prefix_entries[0]
+    source_object = entry.get("object")
+    archive_root = entry.get("source")
+    if not isinstance(source_object, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._-]*", source_object
+    ):
+        raise CompositionError(
+            "The playable prefix object is not a portable identifier."
+        )
+    neutral_root = _safe_relative(archive_root, "playable.layout[].source")
+
+    entrypoint = _strip_prefix_root(
+        launch.get("entrypoint"), prefix, "launch.entrypoint"
+    )
+    if len(entrypoint.parts) < 2:
+        raise CompositionError(
+            "launch.entrypoint declares no game directory inside the prefix."
+        )
+    game_destination = PurePosixPath(*entrypoint.parts[:-1])
+    working_directory = (
+        _strip_prefix_root(
+            launch.get("working_directory"),
+            prefix,
+            "launch.working_directory",
+        )
+        if launch.get("working_directory") is not None
+        else game_destination
+    )
+
+    return {
+        "source_object": source_object,
+        "neutral_root": neutral_root.as_posix(),
+        # The archived prefix is the archive root itself; the game already
+        # lives inside it at its final destination.
+        "prefix_source": neutral_root.as_posix(),
+        "game_source": (neutral_root / game_destination).as_posix(),
+        "game_destination_in_prefix": game_destination.as_posix(),
+        "entrypoint_relative_to_game": entrypoint.parts[-1],
+        "working_directory_in_prefix": working_directory.as_posix(),
+    }
+
+
 def _bottles_overlay(
     *,
     capsule_path: Path,
@@ -607,13 +699,6 @@ def _bottles_overlay(
     if len(matches) != 1:
         raise CompositionError("Bottles source profile is absent.")
     source = matches[0]
-    contract = _read_contract(capsule_path, source)
-    contract_name = contract.get("contract")
-    if contract_name not in _NEUTRAL_CONTRACTS:
-        raise CompositionError(
-            "Bottles requires a compatible neutral Linux source contract."
-        )
-
     required_fields = (
         "source_object",
         "neutral_root",
@@ -623,6 +708,22 @@ def _bottles_overlay(
         "entrypoint_relative_to_game",
         "working_directory_in_prefix",
     )
+
+    if _source_kind(capsule_path, source) == "playable-wine":
+        # Historical capsules carry no neutral contract. Their playable Wine
+        # layout describes the same preserved material, so Bottles derives the
+        # neutral fields instead of refusing a technically valid composition.
+        contract = _neutral_fields_from_playable(source)
+        prefix_contains_game = True
+    else:
+        contract = _read_contract(capsule_path, source)
+        contract_name = contract.get("contract")
+        if contract_name not in _NEUTRAL_CONTRACTS:
+            raise CompositionError(
+                "Bottles requires a compatible neutral Linux source contract."
+            )
+        prefix_contains_game = False
+
     missing = [
         name for name in required_fields
         if not isinstance(contract.get(name), str) or not contract.get(name)
@@ -673,6 +774,7 @@ def _bottles_overlay(
         "baseline_state": contract.get(
             "baseline_state", "embedded-or-unknown"
         ),
+        "prefix_contains_game": prefix_contains_game,
         "runner_binding": "selected",
         "preferred_runner": runner.runner_id,
         "flatpak_app": "com.usebottles.bottles",
@@ -722,6 +824,7 @@ def compose_bottles(
     collection_root: Path,
     capsule_path: Path,
     runner_id: str,
+    destination: Path,
     bottles_path: Path | None = None,
     bottle_name: str,
     source_profile_id: str | None = None,
@@ -747,17 +850,54 @@ def compose_bottles(
             "The Bottles managed path is not writable."
         )
 
+    destination = destination.expanduser().absolute()
+    if destination.exists() or destination.is_symlink():
+        raise CompositionError(
+            f"The destination already exists: {destination}"
+        )
+    destination_parent = destination.parent
+    if (
+        destination_parent.is_symlink()
+        or not destination_parent.is_dir()
+    ):
+        raise CompositionError(
+            "The destination parent must be an existing regular directory."
+        )
+    destination_parent = destination_parent.resolve(strict=True)
+    destination = destination_parent / destination.name
+    try:
+        destination.relative_to(collection_root)
+    except ValueError:
+        pass
+    else:
+        raise CompositionError(
+            "The destination must remain outside the Vault collection."
+        )
+
+    # Resolving the runner is cheap and can fail for material reasons, so it
+    # happens before tens of gigabytes are extracted rather than after. It
+    # also fixes the directory name Bottles will see, which the generated
+    # bottle.yml must carry.
+    try:
+        installation = ensure_bottles_runner(
+            collection_root,
+            bottles_path,
+            runner,
+        )
+    except (RunnerCatalogError, RunnerDeploymentError) as exc:
+        raise CompositionError(str(exc)) from exc
+
     deployment = None
-    runner_created = False
+    runner_created = installation.created
     play_result = None
     played = False
     play_complete: bool | None = None
-    # Heavy staging belongs beside the requested final bottle.  This keeps all
-    # large copies on the user-selected filesystem and allows atomic publish;
-    # /tmp is reserved for small control data elsewhere.
+    # Heavy staging belongs beside the requested external materialization.
+    # This keeps all large copies on the selected filesystem and allows the
+    # adapter to publish atomically without duplicating the bottle in Bottles.
     with tempfile.TemporaryDirectory(
         prefix=f".ogv-work-{_portable_id(bottle_name)}-",
-        dir=bottles_path,
+        dir=destination_parent,
     ) as temporary:
         root = Path(temporary)
         operational_capsule, profile_id = _bottles_overlay(
@@ -780,33 +920,30 @@ def compose_bottles(
                 profile_id=profile_id,
                 runner=runner,
                 bottle_name=bottle_name,
+                runner_name=installation.name,
             )
             validate_neutral_bottles_source(
                 materialization=raw,
                 capsule_path=operational_capsule,
                 profile_id=profile_id,
             )
-            try:
-                _runner_path, runner_created = ensure_bottles_runner(
-                    collection_root,
-                    bottles_path,
-                    runner,
-                )
-            except (RunnerCatalogError, RunnerDeploymentError) as exc:
-                raise CompositionError(str(exc)) from exc
-            deployment = deploy_bottles_profile(
+            deployment = deploy_external_bottles_profile(
                 capsule_path=operational_capsule,
                 profile_id=profile_id,
                 materialization=raw,
+                destination=destination,
                 bottles_path=bottles_path,
                 bottle_name=bottle_name,
                 state_backup=state_backup,
                 require_state_backup=True,
+                state_capsule_path=capsule_path,
             )
             if play:
-                launch_plan, returncode = run_bottles_deployment(
-                    bottles_path=bottles_path,
-                    bottle_name=bottle_name,
+                launch_plan, returncode = (
+                    run_external_bottles_deployment(
+                        destination=destination,
+                        bottles_path=bottles_path,
+                    )
                 )
                 play_result = {
                     "plan": launch_plan.to_dict(),
@@ -829,7 +966,7 @@ def compose_bottles(
         backend="bottles",
         runner_id=runner.runner_id,
         profile_id=profile_id,
-        destination=str(Path(bottles_path) / bottle_name),
+        destination=str(destination),
         materialized=True,
         played=played,
         play_complete=play_complete,
@@ -1856,6 +1993,7 @@ def compose_umu(
             destination=destination,
             state_backup=state_backup,
             require_state_backup=True,
+            state_capsule_path=capsule_path,
         )
         played = False
         play_complete: bool | None = None
