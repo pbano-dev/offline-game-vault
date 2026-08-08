@@ -100,6 +100,21 @@ from .verifier import (
     resolve_capsule_object,
     verify_object,
 )
+from .object_manifest import (
+    ObjectManifestError,
+    compute_sidecar_digest,
+    detect_source_root,
+    format_manifest,
+    generate_object_manifest,
+    manifest_path,
+    manifest_sidecar_path,
+    write_manifest_atomically,
+)
+from .manifest_catalog import (
+    ManifestCatalogError,
+    generate_missing_manifests,
+    scan_vault,
+)
 
 
 def _print_text_plan(plan: MaterializationPlan) -> None:
@@ -361,6 +376,223 @@ def _command_ingest_object(args: argparse.Namespace) -> int:
         _print_text_ingest(result)
 
     return 0
+
+
+def _resolve_manifest_target(args: argparse.Namespace) -> tuple[Path, str, int, str]:
+    """Return ``(archive, digest, size, format)`` for the target object.
+
+    Supports the same two modes as verify-object, but ``--vault-root`` here
+    plays a dual role: it locates the object in capsule mode and it names
+    the manifest destination in either mode, so it is accepted alongside
+    direct-mode arguments.
+    """
+    capsule_mode = (
+        args.capsule is not None or args.object_id is not None
+    )
+    direct_mode = args.path is not None or args.digest is not None
+
+    if capsule_mode and direct_mode:
+        raise ObjectManifestError(
+            "Choose either capsule mode (--capsule, --object-id) "
+            "or direct mode (--path, --digest)."
+        )
+
+    if capsule_mode:
+        missing = [
+            name for name, value in (
+                ("--capsule", args.capsule),
+                ("--object-id", args.object_id),
+                ("--vault-root", args.vault_root),
+            ) if value is None
+        ]
+        if missing:
+            raise ObjectManifestError(
+                "Capsule mode requires " + ", ".join(missing) + "."
+            )
+        try:
+            capsule_document = json.loads(
+                args.capsule.expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ObjectManifestError(
+                f"Could not read capsule at {args.capsule}: {exc}"
+            ) from exc
+        format_name: str | None = None
+        for entry in capsule_document.get("objects", []):
+            if isinstance(entry, dict) and entry.get("id") == args.object_id:
+                format_name = entry.get("format")
+                break
+        if not isinstance(format_name, str) or not format_name:
+            raise ObjectManifestError(
+                f"Capsule does not declare a format for object "
+                f"{args.object_id!r}."
+            )
+        try:
+            spec = resolve_capsule_object(
+                capsule_path=args.capsule,
+                object_id=args.object_id,
+                vault_root=args.vault_root,
+            )
+        except VerifyError as exc:
+            raise ObjectManifestError(str(exc)) from exc
+        return (
+            spec.path,
+            spec.expected_digest,
+            spec.expected_size or 0,
+            format_name,
+        )
+
+    if direct_mode:
+        missing = [
+            name for name, value in (
+                ("--path", args.path),
+                ("--digest", args.digest),
+            ) if value is None
+        ]
+        if missing:
+            raise ObjectManifestError(
+                "Direct mode requires " + ", ".join(missing) + "."
+            )
+        if not getattr(args, "format", None):
+            raise ObjectManifestError(
+                "Direct mode requires --format (e.g. tar.gz, tar.zst, zip)."
+            )
+        try:
+            spec = direct_object_spec(
+                path=args.path,
+                digest=args.digest,
+                expected_size=args.expected_size,
+            )
+        except VerifyError as exc:
+            raise ObjectManifestError(str(exc)) from exc
+        return spec.path, spec.expected_digest, spec.expected_size or 0, args.format
+
+    raise ObjectManifestError(
+        "Provide capsule mode (--capsule, --object-id, --vault-root) "
+        "or direct mode (--path, --digest, --format)."
+    )
+
+
+def _command_generate_object_manifest(args: argparse.Namespace) -> int:
+    archive, digest, size, format_name = _resolve_manifest_target(args)
+
+    if size == 0:
+        size = archive.stat().st_size
+
+    # Verify the object before writing anything about it. A manifest that
+    # describes an object whose bytes do not match its declared digest is
+    # not evidence — it is a lie with authority.
+    try:
+        verification = verify_object(
+            ObjectSpec(
+                object_id=None,
+                path=archive,
+                expected_digest=digest,
+                expected_size=size if size else None,
+                vault_root=None,
+            )
+        )
+    except VerifyError as exc:
+        raise ObjectManifestError(str(exc)) from exc
+    if not verification.verified:
+        raise ObjectManifestError(
+            f"Object at {archive} does not match its declared digest; "
+            f"refusing to write a manifest for it."
+        )
+
+    source_root = args.source_root
+    if source_root is None:
+        source_root = detect_source_root(archive, format_name)
+
+    manifest = generate_object_manifest(
+        archive=archive,
+        archive_format=format_name,
+        source_root=source_root,
+        object_digest=digest,
+        object_size=size,
+    )
+
+    destination_argument = args.output
+    if destination_argument is not None:
+        destination_path = destination_argument.expanduser().resolve()
+    elif args.vault_root is not None:
+        destination_path = manifest_path(args.vault_root, digest)
+    else:
+        raise ObjectManifestError(
+            "Provide either --output or --vault-root to store the manifest."
+        )
+
+    if args.dry_run:
+        written_manifest = destination_path
+        written_sidecar = manifest_sidecar_path(destination_path)
+    else:
+        written_manifest, written_sidecar = write_manifest_atomically(
+            manifest, destination_path
+        )
+
+    payload = {
+        "schema": 0,
+        "object_digest": digest,
+        "object_size": size,
+        "source_root": source_root,
+        "file_count": manifest.file_count,
+        "total_bytes": manifest.total_bytes,
+        "manifest_path": str(written_manifest),
+        "sidecar_path": str(written_sidecar),
+        "manifest_digest": compute_sidecar_digest(format_manifest(manifest)),
+        "dry_run": bool(args.dry_run),
+    }
+
+    if args.json:
+        print(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+        )
+    else:
+        print(f"Object:         {digest}")
+        print(f"Format:         {format_name}")
+        print(f"Source root:    {source_root}")
+        print(f"Files:          {manifest.file_count}")
+        print(f"Total bytes:    {manifest.total_bytes}")
+        print(f"Manifest:       {written_manifest}")
+        print(f"Sidecar:        {written_sidecar}")
+        print(f"Manifest digest:{payload['manifest_digest']}")
+        if args.dry_run:
+            print("(dry-run: nothing was written)")
+
+    return 0
+
+
+def _command_generate_missing_manifests(args: argparse.Namespace) -> int:
+    result = generate_missing_manifests(
+        collection_root=args.collection_root,
+        vault_root=args.vault_root,
+        limit=args.limit,
+        dry_run=args.dry_run,
+    )
+
+    if args.json:
+        payload = result.to_dict()
+        payload["dry_run"] = bool(args.dry_run)
+        print(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+        )
+    else:
+        print(f"Generated:       {len(result.generated)}")
+        print(f"Already present: {len(result.already_present)}")
+        print(f"Skipped:         {len(result.skipped)}")
+        print(f"Failed:          {len(result.failed)}")
+        if result.skipped:
+            print("Skipped objects:")
+            for digest, reason in result.skipped:
+                print(f"  - {digest}: {reason}")
+        if result.failed:
+            print("Failed objects:")
+            for digest, reason in result.failed:
+                print(f"  - {digest}: {reason}")
+        if args.dry_run:
+            print("(dry-run: nothing was written)")
+
+    return 1 if result.has_failures else 0
 
 
 def _print_profile_ingest(result: ProfileIngestResult) -> None:
@@ -1695,6 +1927,123 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.set_defaults(handler=_command_ingest_object)
 
 
+    manifest = commands.add_parser(
+        "generate-object-manifest",
+        help=(
+            "Compute the per-file manifest of one preserved object so a "
+            "materialization can be verified without the Vault."
+        ),
+    )
+    manifest.add_argument(
+        "--capsule",
+        type=Path,
+        help="Capsule containing the object declaration (capsule mode).",
+    )
+    manifest.add_argument(
+        "--object-id",
+        help="Object ID declared by the capsule (capsule mode).",
+    )
+    manifest.add_argument(
+        "--vault-root",
+        type=Path,
+        help=(
+            "Root of the immutable Vault. Required in capsule mode; also "
+            "used as the manifest destination unless --output is given."
+        ),
+    )
+    manifest.add_argument(
+        "--path",
+        type=Path,
+        help="Direct path to a regular-file object (direct mode).",
+    )
+    manifest.add_argument(
+        "--digest",
+        help="Expected lowercase sha256: digest in direct mode.",
+    )
+    manifest.add_argument(
+        "--expected-size",
+        type=int,
+        help="Optional expected byte count in direct mode.",
+    )
+    manifest.add_argument(
+        "--format",
+        help=(
+            "Archive format in direct mode: tar, tar.gz, tar.zst or zip. "
+            "Taken from the capsule in capsule mode."
+        ),
+    )
+    manifest.add_argument(
+        "--source-root",
+        help=(
+            "Top-level directory of the archive. Detected automatically "
+            "when omitted."
+        ),
+    )
+    manifest.add_argument(
+        "--output",
+        type=Path,
+        help=(
+            "Write the manifest and its sidecar here instead of the "
+            "Vault's canonical location."
+        ),
+    )
+    manifest.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Compute everything but do not write the manifest or sidecar."
+        ),
+    )
+    manifest.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    manifest.set_defaults(handler=_command_generate_object_manifest)
+
+
+    missing = commands.add_parser(
+        "generate-missing-manifests",
+        help=(
+            "Walk the Vault and generate a manifest for every object that "
+            "does not have a valid one yet."
+        ),
+    )
+    missing.add_argument(
+        "--collection-root",
+        type=Path,
+        required=True,
+        help="Collection root (the directory that contains 01_IMMUTABLE_VAULT).",
+    )
+    missing.add_argument(
+        "--vault-root",
+        type=Path,
+        help=(
+            "Immutable Vault root. Defaults to "
+            "<collection-root>/01_IMMUTABLE_VAULT."
+        ),
+    )
+    missing.add_argument(
+        "--limit",
+        type=int,
+        help=(
+            "Process at most this many objects. Objects already covered by "
+            "a valid manifest are free and do not count."
+        ),
+    )
+    missing.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be generated without writing anything.",
+    )
+    missing.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    missing.set_defaults(handler=_command_generate_missing_manifests)
+
+
     ingest_profile_parser = commands.add_parser(
         "ingest-profile",
         help=(
@@ -2429,6 +2778,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         StateError,
         CompositionError,
         RunnerCatalogError,
+        ObjectManifestError,
+        ManifestCatalogError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2
