@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from . import __version__
 from .bottles_adapter import (
@@ -113,6 +113,7 @@ from .object_manifest import (
 from .manifest_catalog import (
     ManifestCatalogError,
     generate_missing_manifests,
+    manifest_is_current,
     scan_vault,
 )
 
@@ -356,17 +357,185 @@ def _destination_spec_from_ingest_args(
     )
 
 
+class _FormatUnavailable(Exception):
+    """Signals that the manifest step must be skipped for lack of a format,
+    which is different from a manifest failure.
+    """
+
+
+def _validate_ingest_format_intent(args: argparse.Namespace) -> None:
+    """Reject an ``--format`` assertion that contradicts the capsule.
+
+    Both the capsule and ``--format`` describe the archive format. When both
+    are present and disagree, the user's intent is inconsistent; the ingest
+    is aborted so the mismatch is resolved before anything reaches the Vault.
+    Non-existent capsules or missing object entries are left to the ingest
+    engine itself to surface with its usual errors.
+    """
+    explicit_format = getattr(args, "format", None)
+    if not explicit_format:
+        return
+    if args.capsule is None or args.object_id is None:
+        return
+    try:
+        capsule_document = json.loads(
+            args.capsule.expanduser().read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return
+    for entry in capsule_document.get("objects", []):
+        if not isinstance(entry, dict) or entry.get("id") != args.object_id:
+            continue
+        declared_format = entry.get("format")
+        if (
+            isinstance(declared_format, str)
+            and declared_format
+            and declared_format != explicit_format
+        ):
+            raise ObjectManifestError(
+                f"--format {explicit_format!r} contradicts the capsule "
+                f"declaration {declared_format!r} for object "
+                f"{args.object_id!r}."
+            )
+        return
+
+
+def _resolve_ingest_format(args: argparse.Namespace) -> str:
+    """Return the archive format for the freshly ingested object.
+
+    Capsule mode reads the format from the capsule; direct mode uses
+    ``--format`` when present. If neither yields a format, a clean skip is
+    signalled with ``_FormatUnavailable``.
+    """
+    explicit_format = getattr(args, "format", None)
+    capsule_mode = args.capsule is not None or args.object_id is not None
+
+    if capsule_mode:
+        try:
+            capsule_document = json.loads(
+                args.capsule.expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ObjectManifestError(
+                f"Could not read capsule at {args.capsule}: {exc}"
+            ) from exc
+        for entry in capsule_document.get("objects", []):
+            if isinstance(entry, dict) and entry.get("id") == args.object_id:
+                declared_format = entry.get("format")
+                if isinstance(declared_format, str) and declared_format:
+                    return declared_format
+                break
+        raise ObjectManifestError(
+            f"Capsule does not declare a format for object "
+            f"{args.object_id!r}."
+        )
+
+    if explicit_format:
+        return explicit_format
+
+    raise _FormatUnavailable("direct mode without --format")
+
+
+def _maybe_generate_manifest_for_ingested_object(
+    args: argparse.Namespace,
+    result: IngestResult,
+) -> dict[str, Any]:
+    """Try to write the per-object manifest for a freshly ingested object.
+
+    Never raises: manifest failures become fields on the returned dict. By
+    the time this runs the ingest itself is already authoritative on the
+    object's presence in the Vault, so a manifest mishap must not turn a
+    successful ingest into a command-level failure.
+    """
+    fields: dict[str, Any] = {
+        "manifest_generated": False,
+        "manifest_already_present": False,
+        "manifest_skipped": False,
+        "manifest_skipped_reason": None,
+        "manifest_warning": None,
+        "manifest_path": None,
+    }
+
+    def _record_target() -> None:
+        try:
+            fields["manifest_path"] = str(
+                manifest_path(args.vault_root, result.digest)
+            )
+        except ObjectManifestError:
+            pass
+
+    if getattr(args, "no_manifest", False):
+        fields["manifest_skipped"] = True
+        fields["manifest_skipped_reason"] = "disabled by --no-manifest"
+        _record_target()
+        return fields
+
+    try:
+        archive_format = _resolve_ingest_format(args)
+    except _FormatUnavailable as exc:
+        fields["manifest_skipped"] = True
+        fields["manifest_skipped_reason"] = str(exc)
+        _record_target()
+        return fields
+    except ObjectManifestError as exc:
+        fields["manifest_warning"] = str(exc)
+        _record_target()
+        return fields
+
+    try:
+        target = manifest_path(args.vault_root, result.digest)
+    except ObjectManifestError as exc:
+        fields["manifest_warning"] = str(exc)
+        return fields
+    fields["manifest_path"] = str(target)
+
+    if manifest_is_current(target, result.digest):
+        fields["manifest_already_present"] = True
+        return fields
+
+    archive = Path(result.destination)
+    try:
+        source_root = detect_source_root(archive, archive_format)
+        manifest = generate_object_manifest(
+            archive=archive,
+            archive_format=archive_format,
+            source_root=source_root,
+            object_digest=result.digest,
+            object_size=result.bytes,
+        )
+        write_manifest_atomically(manifest, target)
+    except (ObjectManifestError, OSError) as exc:
+        fields["manifest_warning"] = str(exc)
+        return fields
+
+    fields["manifest_generated"] = True
+    return fields
+
+
 def _command_ingest_object(args: argparse.Namespace) -> int:
+    _validate_ingest_format_intent(args)
     destination_spec = _destination_spec_from_ingest_args(args)
     result = ingest_object(
         source=args.source,
         destination_spec=destination_spec,
     )
 
+    manifest_fields = _maybe_generate_manifest_for_ingested_object(
+        args, result
+    )
+    if manifest_fields["manifest_warning"]:
+        print(
+            "ogv: warning: manifest not generated: "
+            f"{manifest_fields['manifest_warning']}",
+            file=sys.stderr,
+        )
+
     if args.json:
+        payload = result.to_dict()
+        payload.update(manifest_fields)
         print(
             json.dumps(
-                result.to_dict(),
+                payload,
                 indent=2,
                 ensure_ascii=False,
                 sort_keys=True,
@@ -374,6 +543,21 @@ def _command_ingest_object(args: argparse.Namespace) -> int:
         )
     else:
         _print_text_ingest(result)
+        if manifest_fields["manifest_generated"]:
+            print(
+                "Manifest:     generated "
+                f"({manifest_fields['manifest_path']})"
+            )
+        elif manifest_fields["manifest_already_present"]:
+            print(
+                "Manifest:     already present "
+                f"({manifest_fields['manifest_path']})"
+            )
+        elif manifest_fields["manifest_skipped"]:
+            print(
+                "Manifest:     skipped "
+                f"({manifest_fields['manifest_skipped_reason']})"
+            )
 
     return 0
 
@@ -1923,6 +2107,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit machine-readable JSON.",
+    )
+    ingest.add_argument(
+        "--format",
+        help=(
+            "Archive format used to generate the per-object manifest "
+            "(tar, tar.gz, tar.zst, zip). In capsule mode the capsule is "
+            "authoritative and this flag must agree with its declaration; "
+            "a mismatch aborts the ingest. In direct mode this flag is "
+            "required for the manifest to be generated at ingest time."
+        ),
+    )
+    ingest.add_argument(
+        "--no-manifest",
+        action="store_true",
+        dest="no_manifest",
+        help=(
+            "Skip automatic per-object manifest generation for this ingest. "
+            "The manifest can be generated later with "
+            "generate-object-manifest or generate-missing-manifests."
+        ),
     )
     ingest.set_defaults(handler=_command_ingest_object)
 

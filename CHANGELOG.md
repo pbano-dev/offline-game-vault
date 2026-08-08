@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.13.0 — 2026-08-08
+
+### Added
+
+- Per-object content manifests: for every preserved object, a text manifest
+  lists each contained file with its SHA-256 digest, so a materialization
+  can be verified without consulting the Vault it was extracted from.
+  Layout: ``01_IMMUTABLE_VAULT/manifests/sha256/<aa>/<bb>/<hex>`` with a
+  ``<hex>.sha256`` sidecar.
+- ``generate-object-manifest`` computes the manifest for one preserved
+  object in capsule or direct mode, verifying the object bytes before
+  writing anything.
+- ``generate-missing-manifests`` walks the Vault and ensures every object
+  has a valid manifest, deriving the archive format from capsule
+  declarations or from ``INDEX.json`` labels for shared components
+  (runners, backends, UMU runtimes).
+- ``ingest-object`` automatically generates the per-object manifest on
+  successful ingest. Capsule mode reads the format from the capsule;
+  direct mode accepts a new ``--format`` argument. ``--no-manifest``
+  skips the manifest step for bulk ingestion or deferred generation.
+
+### Changed
+
+- ``--format`` in ``ingest-object`` capsule mode must agree with the
+  capsule's declared format; a mismatch aborts the ingest with an
+  explicit conflict error before anything reaches the Vault.
+- Manifest failures during ingest are surfaced as warnings and JSON
+  fields without invalidating the ingest itself: the object is in the
+  Vault, its manifest can be generated later with
+  ``generate-object-manifest`` or ``generate-missing-manifests``.
+
 ## 0.12.2 — 2026-08-05
 ### Fixed
 
