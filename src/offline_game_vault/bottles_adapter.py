@@ -1114,6 +1114,17 @@ def _install_operational_scripts(staging: Path) -> dict[str, str]:
     }
 
 
+def _manifest_check_helper_source() -> str:
+    from . import portable_manifest_check
+
+    path = Path(portable_manifest_check.__file__).resolve()
+    if path.is_symlink() or not path.is_file():
+        raise BottlesAdapterError(
+            "Cannot locate the shared manifest-check helper source."
+        )
+    return path.read_text(encoding="utf-8")
+
+
 def _portable_external_bottles_runtime_source() -> str:
     from . import portable_external_bottles_runtime
 
@@ -1152,6 +1163,18 @@ def _install_external_operational_scripts(
         0o600,
     )
     compile(runtime.read_text(encoding="utf-8"), str(runtime), "exec")
+    # Fase 5: helper compartido para VERIFICAR.sh (manifest-based check).
+    _manifest_check_target = staging / "metadata/ogv_manifest_check.py"
+    _write_operational_file(
+        _manifest_check_target,
+        _manifest_check_helper_source(),
+        0o600,
+    )
+    compile(
+        _manifest_check_target.read_text(encoding="utf-8"),
+        str(_manifest_check_target),
+        "exec",
+    )
     _write_operational_file(
         launcher,
         _external_operational_script("play"),

@@ -575,13 +575,64 @@ def verify(
     root: Path,
     *,
     flatpak_app: str = DEFAULT_FLATPAK_APP,
+    check_manifests: bool = False,
 ) -> dict[str, Any]:
-    return _verify(
+    result = _verify(
         root,
         flatpak_app=flatpak_app,
         require_registration=True,
         require_enumeration=True,
     )
+    if check_manifests:
+        canonical = _root_path(root)
+        manifest_report = _run_manifest_check(
+            canonical,
+            receipt_path=canonical / RECEIPT_NAME,
+        )
+        if isinstance(result, dict):
+            result["manifest_check"] = manifest_report
+    return result
+
+
+
+
+def _run_manifest_check(
+    root: Path,
+    *,
+    receipt_path: Path,
+) -> dict[str, Any]:
+    helper = _load_manifest_check_helper()
+    if helper is None:
+        raise PortableExternalBottlesError(
+            "Manifest-check helper is missing (metadata/ogv_manifest_check.py)."
+        )
+    try:
+        return helper.verify_by_manifests(
+            root=root,
+            receipt_path=receipt_path,
+        )
+    except helper.ManifestCheckError as exc:
+        raise PortableExternalBottlesError(str(exc)) from exc
+
+
+# ---- Fase 5: shared manifest-check helper -----------------------------
+# Loaded lazily from the same metadata/ directory. The helper module is
+# copied alongside this one by the backend adapter at materialization time.
+
+
+def _load_manifest_check_helper():
+    import importlib.util
+    helper_path = Path(__file__).resolve().parent / "ogv_manifest_check.py"
+    if not helper_path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "ogv_manifest_check", helper_path
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _play_command(
@@ -815,6 +866,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = verify(
                 args.root,
                 flatpak_app=args.flatpak_app,
+                check_manifests=True,
             )
             if args.json:
                 _print(result)

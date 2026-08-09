@@ -290,8 +290,17 @@ def _verify_protected(
     return tuple(results)
 
 
-def verify_materialization(root: Path) -> dict[str, Any]:
-    """Verify the portable receipt, paths, and protected files."""
+def verify_materialization(
+    root: Path, *, check_manifests: bool = False
+) -> dict[str, Any]:
+    """Verify the portable receipt, paths, and protected files.
+
+    ``check_manifests=True`` additionally runs the manifest-based
+    verification introduced by fase 5. It is off by default so that
+    the internal callers ``play`` and ``uninstall`` do not force a
+    full re-hash of the tree on every game launch; the CLI ``verify``
+    subcommand (which is what VERIFICAR.sh invokes) enables it.
+    """
 
     canonical = _root_path(root)
     receipt = _receipt(canonical)
@@ -351,7 +360,7 @@ def verify_materialization(root: Path) -> dict[str, Any]:
             "Baseline state belongs to another capsule."
         )
 
-    return {
+    result = {
         "schema": 0,
         "capsule_id": receipt["capsule_id"],
         "profile_id": receipt["profile_id"],
@@ -363,6 +372,12 @@ def verify_materialization(root: Path) -> dict[str, Any]:
             for name, path in paths.items()
         },
     }
+    if check_manifests:
+        result["manifest_check"] = _run_manifest_check(
+            canonical,
+            receipt_path=canonical / PLAYABLE_RECEIPT_NAME,
+        )
+    return result
 
 
 def _runtime_environment(
@@ -1031,6 +1046,50 @@ def _print_json(value: dict[str, Any]) -> None:
     )
 
 
+
+
+def _run_manifest_check(
+    root: Path,
+    *,
+    receipt_path: Path,
+) -> dict[str, Any]:
+    """Call the shared manifest-check helper; translate failures."""
+    helper = _load_manifest_check_helper()
+    if helper is None:
+        raise PortableRuntimeError(
+            "Manifest-check helper is missing (metadata/ogv_manifest_check.py). "
+            "Run VERIFICAR.sh on the machine where the materialization was "
+            "produced with a matching offline-game-vault version."
+        )
+    try:
+        return helper.verify_by_manifests(
+            root=root,
+            receipt_path=receipt_path,
+        )
+    except helper.ManifestCheckError as exc:
+        raise PortableRuntimeError(str(exc)) from exc
+
+
+# ---- Fase 5: shared manifest-check helper -----------------------------
+# Loaded lazily from the same metadata/ directory. The helper module is
+# copied alongside this one by the backend adapter at materialization time.
+
+
+def _load_manifest_check_helper():
+    import importlib.util
+    helper_path = Path(__file__).resolve().parent / "ogv_manifest_check.py"
+    if not helper_path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "ogv_manifest_check", helper_path
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ogv-playable-runtime",
@@ -1071,7 +1130,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "verify":
-            result = verify_materialization(args.root)
+            result = verify_materialization(
+                args.root, check_manifests=True
+            )
         elif args.command == "play":
             extra = list(args.arguments)
             if extra and extra[0] == "--":

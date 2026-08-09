@@ -487,6 +487,12 @@ def _write_atomic(path: Path, text: str, mode: int) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _manifest_check_helper_source() -> str:
+    from . import portable_manifest_check
+    path = Path(portable_manifest_check.__file__).resolve()
+    return path.read_text(encoding="utf-8")
+
+
 def _runtime_source() -> str:
     from . import portable_runtime
 
@@ -933,6 +939,21 @@ def materialize_playable_profile(
         runtime_path = stage / PORTABLE_RUNTIME_DESTINATION
         _write_atomic(runtime_path, runtime_source, 0o600)
         compile(runtime_source, str(runtime_path), "exec")
+        # Fase 5: copy the shared manifest-check helper next to the
+        # runtime so VERIFICAR.sh can perform post-materialization
+        # verification against travelled manifests.
+        _manifest_check_source = _manifest_check_helper_source()
+        _manifest_check_path = (
+            stage / "metadata" / "ogv_manifest_check.py"
+        )
+        _write_atomic(
+            _manifest_check_path, _manifest_check_source, 0o600
+        )
+        compile(
+            _manifest_check_source,
+            str(_manifest_check_path),
+            "exec",
+        )
 
         runtime_root = _path_under(stage, contract.runtime)
         runtime_root.mkdir(parents=True, mode=0o700, exist_ok=True)
