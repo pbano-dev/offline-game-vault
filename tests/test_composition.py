@@ -27,6 +27,12 @@ from offline_game_vault.storage import (
     ingest_object,
 )
 from offline_game_vault.verifier import ObjectSpec
+from offline_game_vault.object_manifest import (
+    detect_source_root,
+    generate_object_manifest,
+    manifest_path,
+    write_manifest_atomically,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -291,6 +297,20 @@ class CompositionTests(unittest.TestCase):
                 expected_size=archive.stat().st_size,
                 vault_root=self.immutable.resolve(),
             ),
+        )
+        # Fase 4 pre-flight requires a valid manifest for every object
+        # in the operational capsule. Test fixtures generate it here so
+        # composition can proceed exactly as it does with real ingests.
+        _manifest = generate_object_manifest(
+            archive=destination,
+            archive_format="tar.gz",
+            source_root=detect_source_root(destination, "tar.gz"),
+            object_digest=digest,
+            object_size=archive.stat().st_size,
+        )
+        write_manifest_atomically(
+            _manifest,
+            manifest_path(self.immutable, digest),
         )
         return {
             "id": object_id,
