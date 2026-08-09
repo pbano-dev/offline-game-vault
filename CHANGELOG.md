@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.14.0 — 2026-08-09
+
+### Added
+
+- Materializations are now self-verifiable end-to-end. Every
+  ``compose_*`` packages the per-object manifests generated at Vault
+  ingest into the destination alongside a manifest of the files it
+  wrote on the fly, and the backend runtime that ships with every
+  materialization now consumes that evidence.
+- ``metadata/manifests/sha256/<aa>/<bb>/<hex>`` byte-copies of every
+  participating object manifest (plus their ``.sha256`` sidecars) so a
+  detached materialization carries its own integrity evidence.
+- ``metadata/generated-files.json`` records every composition-authored
+  file (launchers, receipts, runtime helpers) with its SHA-256 and
+  size, so bit rot on any of them is detectable offline.
+- ``<primary-receipt>.sha256`` sidecar for each backend's main receipt.
+- ``metadata/ogv_manifest_check.py`` shared standalone helper copied
+  into every materialization alongside the backend runtime; loaded via
+  ``importlib`` so no sys.path manipulation is required.
+- ``VERIFICAR.sh`` performs real verification against the travelled
+  evidence: recomputes the receipt sidecar, rehashes every entry in
+  ``generated-files.json``, verifies each per-object manifest against
+  its sidecar, and counts destination files that match any manifest
+  entry.
+
+### Changed
+
+- ``ingest-object``, ``compose``, and the runtime ``verify`` share a
+  strict format for the per-object manifest (see
+  ``object_manifest.format_manifest``): ``key:value`` headers, blank
+  line, ``<hex> <size> <path>`` entries.
+- The runtime ``verify`` gains a ``check_manifests`` argument. Internal
+  callers (``play``, ``uninstall``) leave it off so game launches
+  remain cheap; the CLI ``verify`` subcommand — the one
+  ``VERIFICAR.sh`` invokes — enables it.
+- Manifest verification is deliberately "based on existence, not
+  enumeration": corruption of composition-controlled evidence is a
+  hard failure, but files the user added by hand or object content a
+  materialization legitimately discarded show up only as informational
+  counts. Extras never block a verification.
+
+### Fixed
+
+- Pre-flight in ``compose_*`` refuses to materialize when any object
+  lacks a manifest in the Vault, with a message pointing at
+  ``ogv generate-missing-manifests``. This prevents silent production
+  of materializations that could not be self-verifiable.
+
 ## 0.13.0 — 2026-08-08
 
 ### Added

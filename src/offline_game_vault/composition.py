@@ -17,6 +17,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 from typing import Any, Sequence
@@ -49,6 +50,13 @@ from .umu_adapter import (
     run_umu_materialization,
 )
 from .verifier import VerifyError, resolve_capsule_object, verify_object
+from .manifest_travel import (
+    ManifestTravelError,
+    copy_manifests_to_materialization,
+    validate_manifests_present_for,
+    write_generated_files_manifest,
+    write_receipt_sidecar,
+)
 
 
 class CompositionError(RuntimeError):
@@ -516,6 +524,97 @@ def _composition_profile_id(backend: str, runner: RunnerRecord) -> str:
     return _portable_id(f"composition-{label}-{runner.runner_id}")
 
 
+
+# --------------------------------------------------------- fase 4 helpers
+
+# Primary receipt filename per backend, at the destination root. Used by the
+# travel step to sidecar the receipt against accidental corruption.
+_PLAYABLE_RECEIPT_NAME = "playable-materialization.json"
+_UMU_RECEIPT_NAME = "umu-materialization.json"
+_BOTTLES_RECEIPT_NAME = ".ogv-bottles-deployment.json"
+
+
+def _capsule_object_digests(operational_capsule: Path) -> list[str]:
+    """Return the sha256 digests declared by an operational capsule.
+
+    Used at the start of ``compose_*`` to fail fast if any object lacks a
+    manifest in the Vault. Duplicates are preserved by insertion order so
+    the caller sees exactly what the capsule declares.
+    """
+    document = json.loads(
+        operational_capsule.read_text(encoding="utf-8")
+    )
+    digests: list[str] = []
+    for entry in document.get("objects", []):
+        if not isinstance(entry, dict):
+            continue
+        digest = entry.get("digest")
+        if isinstance(digest, str) and digest.startswith("sha256:"):
+            digests.append(digest)
+    return digests
+
+
+def _top_level_prefixes(values: list[Any]) -> set[str]:
+    """Return the set of first path segments from a list of path-like values."""
+    prefixes: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        first = value.split("/", 1)[0]
+        if first:
+            prefixes.add(first)
+    return prefixes
+
+
+def _object_prefixes_from_playable(destination: Path) -> set[str]:
+    """Top-level directories at destination that hold object content."""
+    receipt = json.loads(
+        (destination / _PLAYABLE_RECEIPT_NAME).read_text(encoding="utf-8")
+    )
+    paths = receipt.get("paths", {})
+    return _top_level_prefixes(
+        [paths.get(key) for key in ("prefix", "runner", "runtime")]
+    )
+
+
+def _object_prefixes_from_umu(destination: Path) -> set[str]:
+    receipt = json.loads(
+        (destination / _UMU_RECEIPT_NAME).read_text(encoding="utf-8")
+    )
+    paths = receipt.get("paths", {})
+    return _top_level_prefixes(
+        [paths.get(key) for key in ("prefix", "runner", "runtime")]
+    )
+
+
+def _object_prefixes_from_bottles(destination: Path) -> set[str]:
+    receipt = json.loads(
+        (destination / _BOTTLES_RECEIPT_NAME).read_text(encoding="utf-8")
+    )
+    layout = receipt.get("layout", {})
+    return _top_level_prefixes(
+        [layout.get(key) for key in ("prefix", "game")]
+    )
+
+
+def _rollback_destination(destination: Path) -> None:
+    """Remove ``destination`` on manifest-travel failure, best-effort.
+
+    Called only when a compose has already published to ``destination`` but
+    the travel step could not complete. The compose's invariant is that a
+    successful return implies a self-verifiable tree; if travel failed, the
+    materialization must not remain in place under a false promise.
+    """
+    try:
+        shutil.rmtree(destination)
+    except OSError as rollback_exc:
+        print(
+            "ogv: warning: could not roll back destination "
+            f"{destination}: {rollback_exc}",
+            file=sys.stderr,
+        )
+
+
 def compose_wine(
     *,
     collection_root: Path,
@@ -555,6 +654,13 @@ def compose_wine(
             runner=runner,
             source_profile_id=source_id,
         )
+        digests = _capsule_object_digests(operational_capsule)
+        try:
+            validate_manifests_present_for(
+                vault_root=vault_root, digests=digests
+            )
+        except ManifestTravelError as exc:
+            raise CompositionError(str(exc)) from exc
         result = materialize_playable_profile(
             capsule_path=operational_capsule,
             profile_id=profile_id,
@@ -563,6 +669,30 @@ def compose_wine(
             state_backup=state_backup,
             state_capsule_path=capsule_path,
         )
+        try:
+            copy_manifests_to_materialization(
+                vault_root=vault_root,
+                destination=destination,
+                digests=digests,
+            )
+            prefixes = _object_prefixes_from_playable(destination)
+            receipt_path = destination / _PLAYABLE_RECEIPT_NAME
+            write_generated_files_manifest(
+                destination=destination,
+                object_owned_prefixes=prefixes,
+                excluded_paths={
+                    receipt_path.with_name(receipt_path.name + ".sha256")
+                },
+            )
+            write_receipt_sidecar(receipt_path)
+        except (ManifestTravelError, OSError) as exc:
+            _rollback_destination(destination)
+            raise CompositionError(
+                "Materialization was published but manifest travel "
+                f"failed: {exc}. The destination was removed to "
+                "preserve the invariant that a successful compose "
+                "produces a self-verifiable tree."
+            ) from exc
         played = False
         play_complete: bool | None = None
         play_result: dict[str, Any] | None = None
@@ -906,6 +1036,13 @@ def compose_bottles(
             runner=runner,
             destination=root / "capsule",
         )
+        digests = _capsule_object_digests(operational_capsule)
+        try:
+            validate_manifests_present_for(
+                vault_root=vault_root, digests=digests
+            )
+        except ManifestTravelError as exc:
+            raise CompositionError(str(exc)) from exc
         raw = root / "neutral-source"
         materialize_profile(
             capsule_path=operational_capsule,
@@ -938,6 +1075,41 @@ def compose_bottles(
                 require_state_backup=True,
                 state_capsule_path=capsule_path,
             )
+            try:
+                copy_manifests_to_materialization(
+                    vault_root=vault_root,
+                    destination=destination,
+                    digests=digests,
+                )
+                prefixes = _object_prefixes_from_bottles(destination)
+                receipt_path = destination / _BOTTLES_RECEIPT_NAME
+                write_generated_files_manifest(
+                    destination=destination,
+                    object_owned_prefixes=prefixes,
+                    excluded_paths={
+                        receipt_path.with_name(
+                            receipt_path.name + ".sha256"
+                        )
+                    },
+                )
+                write_receipt_sidecar(receipt_path)
+            except (ManifestTravelError, OSError) as exc:
+                # Un-register the external bottle before dropping the
+                # destination; leaving a dangling symlink in the managed
+                # Bottles directory would be worse than a lost
+                # materialization.
+                try:
+                    (bottles_path / bottle_name).unlink()
+                except OSError:
+                    pass
+                _rollback_destination(destination)
+                raise CompositionError(
+                    "Materialization was published but manifest "
+                    f"travel failed: {exc}. The destination and its "
+                    "external registration were removed to preserve "
+                    "the invariant that a successful compose produces "
+                    "a self-verifiable tree."
+                ) from exc
             if play:
                 launch_plan, returncode = (
                     run_external_bottles_deployment(
@@ -1986,6 +2158,13 @@ def compose_umu(
             runtime=runtime,
             output=Path(temporary) / "capsule",
         )
+        digests = _capsule_object_digests(operational_capsule)
+        try:
+            validate_manifests_present_for(
+                vault_root=vault_root, digests=digests
+            )
+        except ManifestTravelError as exc:
+            raise CompositionError(str(exc)) from exc
         result = materialize_umu_profile(
             capsule_path=operational_capsule,
             profile_id=profile_id,
@@ -1995,6 +2174,30 @@ def compose_umu(
             require_state_backup=True,
             state_capsule_path=capsule_path,
         )
+        try:
+            copy_manifests_to_materialization(
+                vault_root=vault_root,
+                destination=destination,
+                digests=digests,
+            )
+            prefixes = _object_prefixes_from_umu(destination)
+            receipt_path = destination / _UMU_RECEIPT_NAME
+            write_generated_files_manifest(
+                destination=destination,
+                object_owned_prefixes=prefixes,
+                excluded_paths={
+                    receipt_path.with_name(receipt_path.name + ".sha256")
+                },
+            )
+            write_receipt_sidecar(receipt_path)
+        except (ManifestTravelError, OSError) as exc:
+            _rollback_destination(destination)
+            raise CompositionError(
+                "Materialization was published but manifest travel "
+                f"failed: {exc}. The destination was removed to "
+                "preserve the invariant that a successful compose "
+                "produces a self-verifiable tree."
+            ) from exc
         played = False
         play_complete: bool | None = None
         play_result: dict[str, Any] | None = None

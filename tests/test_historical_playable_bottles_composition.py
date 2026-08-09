@@ -28,6 +28,12 @@ from offline_game_vault.composition import (
     compose_bottles,
 )
 from offline_game_vault.storage import ObjectSpec, canonical_object_path, ingest_object
+from offline_game_vault.object_manifest import (
+    detect_source_root,
+    generate_object_manifest,
+    manifest_path,
+    write_manifest_atomically,
+)
 
 
 GAME_PAYLOAD = b"synthetic-sekiro-executable"
@@ -163,6 +169,22 @@ class HistoricalPlayableBottlesTest(unittest.TestCase):
                 expected_size=archive.stat().st_size,
                 vault_root=self.immutable.resolve(),
             ),
+        )
+        # Fase 4 pre-flight requires a valid manifest for every object
+        # in the operational capsule; test fixtures generate it here.
+        _manifest = generate_object_manifest(
+            archive=canonical_object_path(self.immutable, digest),
+            archive_format="tar.gz",
+            source_root=detect_source_root(
+                canonical_object_path(self.immutable, digest),
+                "tar.gz",
+            ),
+            object_digest=digest,
+            object_size=archive.stat().st_size,
+        )
+        write_manifest_atomically(
+            _manifest,
+            manifest_path(self.immutable, digest),
         )
         return {
             "id": object_id,

@@ -210,7 +210,9 @@ def _verify_offline_runtime(
     }
 
 
-def verify(root: Path) -> dict[str, Any]:
+def verify(
+    root: Path, *, check_manifests: bool = False
+) -> dict[str, Any]:
     canonical = _root_path(root)
     receipt = _receipt(canonical)
     runtime = _verify_offline_runtime(canonical, receipt)
@@ -273,7 +275,7 @@ def verify(root: Path) -> dict[str, Any]:
         if path.is_symlink() or not path.is_file() or not os.access(path, os.X_OK):
             raise PortableUmuError(f"UMU {label} is absent or not executable.")
 
-    return {
+    result = {
         "schema": 0,
         "capsule_id": receipt.get("capsule_id"),
         "profile_id": receipt.get("profile_id"),
@@ -284,6 +286,53 @@ def verify(root: Path) -> dict[str, Any]:
         "verified": True,
         "complete": True,
     }
+    if check_manifests:
+        result["manifest_check"] = _run_manifest_check(
+            canonical,
+            receipt_path=canonical / RECEIPT_NAME,
+        )
+    return result
+
+
+
+
+def _run_manifest_check(
+    root: Path,
+    *,
+    receipt_path: Path,
+) -> dict[str, Any]:
+    helper = _load_manifest_check_helper()
+    if helper is None:
+        raise PortableUmuError(
+            "Manifest-check helper is missing (metadata/ogv_manifest_check.py)."
+        )
+    try:
+        return helper.verify_by_manifests(
+            root=root,
+            receipt_path=receipt_path,
+        )
+    except helper.ManifestCheckError as exc:
+        raise PortableUmuError(str(exc)) from exc
+
+
+# ---- Fase 5: shared manifest-check helper -----------------------------
+# Loaded lazily from the same metadata/ directory. The helper module is
+# copied alongside this one by the backend adapter at materialization time.
+
+
+def _load_manifest_check_helper():
+    import importlib.util
+    helper_path = Path(__file__).resolve().parent / "ogv_manifest_check.py"
+    if not helper_path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "ogv_manifest_check", helper_path
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def play(root: Path, *, arguments: Sequence[str] = ()) -> dict[str, Any]:
@@ -444,7 +493,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "verify":
-            result = verify(args.root)
+            result = verify(args.root, check_manifests=True)
         elif args.command == "play":
             extra = list(args.arguments)
             if extra and extra[0] == "--":
