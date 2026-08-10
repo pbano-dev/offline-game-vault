@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.16.0 — 2026-08-10
+
+### Added
+
+- ``compose --backend umu`` now recognises capsules that carry a
+  preserved UMU rich contract (``adapter: umu`` with a ``umu`` block
+  of ``schema: 0``) as a first-class source kind called ``umu-native``.
+  The capsule's ``umu`` block is a complete recipe — preserved
+  launchers with digests, protected manifests, state archives with
+  policies, symlink manifests, nested archives, mutable paths and
+  layout — and does not need to be combined with global runtime,
+  backend and runner references at compose time. Capsules such as
+  Devil May Cry 5, which have shipped this shape from the start, can
+  now be materialised through the compose pipeline (and, via the CLI,
+  from the GUI) instead of only through the low-level ``materialize-umu``.
+- ``_SOURCE_PRIORITIES["umu"]`` prefers ``umu-native`` over the
+  synthesized neutrals when a capsule offers one: an author-preserved
+  contract wins over a runtime overlay.
+- ``CompositionResult.backend_result`` now carries an explicit
+  ``source_kind`` field ("umu-native" or the synthesized alternative)
+  so downstream consumers can tell the two apart.
+
+### Changed
+
+- ``compose_umu`` resolves the source kind before touching shared
+  runtime resolution. For ``umu-native`` sources the capsule is the
+  operational capsule; neither ``_select_shared_umu_runtime`` nor
+  ``_umu_overlay`` is invoked, and ``require_state_backup`` is off
+  (state comes from the preserved ``umu.state_archives``, not from a
+  user-provided backup).
+
+  The previous order — shared runtime resolution before source kind —
+  caused ``compose_umu`` to fail with "no matching global UMU
+  component composition" for umu-native capsules whose preserved
+  runner needed a Steam Linux Runtime family not otherwise present in
+  the Vault (a very real DMC5 + Proton 9.0-203 + steamrt3 case).
+
+- For synthesized ``umu`` sources the flow is unchanged: shared
+  runtime + overlay + ``require_state_backup=True``, exactly as
+  before.
+
+### Fixed
+
+- Devil May Cry 5, and any future capsule that ships a preserved
+  rich UMU contract, is no longer blocked from ``compose`` by
+  ``"Linux source profile cannot provide the material required by
+  umu."``.
+
 ## 0.15.0 — 2026-08-10
 
 ### Changed

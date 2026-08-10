@@ -1136,5 +1136,87 @@ class CompositionTests(unittest.TestCase):
                 "initial_verification"
             ],
         )
+class SourceKindTests(unittest.TestCase):
+    """Unit tests for _source_kind: the classifier that decides which
+    materialization strategy compose_* uses."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tempdir.name)
+        self.fake_capsule = self.root / "capsule.json"
+        self.fake_capsule.write_text("{}", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_umu_native_recognised(self) -> None:
+        """A profile with adapter=umu and umu.schema=0 is umu-native."""
+        from offline_game_vault.composition import _source_kind
+        profile = {
+            "adapter": "umu",
+            "umu": {"schema": 0, "paths": {}, "layout": []},
+        }
+        self.assertEqual(
+            _source_kind(self.fake_capsule, profile),
+            "umu-native",
+        )
+
+    def test_umu_native_requires_schema_zero(self) -> None:
+        """A umu block without schema=0 is not umu-native."""
+        from offline_game_vault.composition import _source_kind
+        profile = {
+            "adapter": "umu",
+            "umu": {"schema": 1},
+        }
+        self.assertNotEqual(
+            _source_kind(self.fake_capsule, profile),
+            "umu-native",
+        )
+
+    def test_umu_native_requires_umu_adapter(self) -> None:
+        """An umu block on a non-umu profile is not umu-native."""
+        from offline_game_vault.composition import _source_kind
+        profile = {
+            "adapter": "wine",
+            "umu": {"schema": 0},
+        }
+        self.assertNotEqual(
+            _source_kind(self.fake_capsule, profile),
+            "umu-native",
+        )
+
+    def test_umu_native_requires_umu_dict(self) -> None:
+        """Missing umu block on umu adapter is not umu-native."""
+        from offline_game_vault.composition import _source_kind
+        profile = {"adapter": "umu"}
+        self.assertIsNone(
+            _source_kind(self.fake_capsule, profile)
+        )
+
+    def test_priority_table_prefers_umu_native(self) -> None:
+        """For backend=umu, umu-native has priority 0 (highest).
+        Ensures preserved rich contracts win over synthesized neutrals
+        when the source profile provides one."""
+        from offline_game_vault.composition import _SOURCE_PRIORITIES
+        umu_priorities = _SOURCE_PRIORITIES["umu"]
+        self.assertEqual(umu_priorities["umu-native"], 0)
+        for other, priority in umu_priorities.items():
+            if other == "umu-native":
+                continue
+            self.assertGreater(priority, 0, other)
+
+    def test_playable_wine_still_recognised(self) -> None:
+        """Guard: adding umu-native didn't break playable-wine detection."""
+        from offline_game_vault.composition import _source_kind
+        profile = {
+            "adapter": "wine",
+            "playable": {"schema": 0, "backend": "wine"},
+        }
+        self.assertEqual(
+            _source_kind(self.fake_capsule, profile),
+            "playable-wine",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

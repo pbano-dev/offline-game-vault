@@ -372,10 +372,11 @@ _SOURCE_PRIORITIES: dict[str, dict[str, int]] = {
         "playable-wine": 3,
     },
     "umu": {
-        "ogv-umu-neutral-v1": 0,
-        "ogv-direct-wine-neutral-v1": 1,
-        "ogv-bottles-neutral-v1": 2,
-        "playable-wine": 3,
+        "umu-native": 0,
+        "ogv-umu-neutral-v1": 1,
+        "ogv-direct-wine-neutral-v1": 2,
+        "ogv-bottles-neutral-v1": 3,
+        "playable-wine": 4,
     },
 }
 
@@ -411,6 +412,18 @@ def _source_kind(
     capsule_path: Path,
     profile: dict[str, Any],
 ) -> str | None:
+    # Preserved UMU rich contract: the umu block is the source of truth.
+    # No overlay with global backend + runtime + runner is needed; the
+    # capsule already declares its own launchers, protected manifests,
+    # state archives, symlinks and nested archives.
+    umu = profile.get("umu")
+    if (
+        profile.get("adapter") == "umu"
+        and isinstance(umu, dict)
+        and umu.get("schema") == 0
+    ):
+        return "umu-native"
+
     playable = profile.get("playable")
     if (
         profile.get("adapter") == "wine"
@@ -2089,16 +2102,34 @@ def compose_umu(
 ) -> CompositionResult:
     collection_root = collection_root.expanduser().resolve(strict=True)
     vault_root = collection_root / "01_IMMUTABLE_VAULT"
+    # Runner selection is a validation (must exist and declare umu
+    # compatibility), regardless of source kind.
     runner = _select_runner(collection_root, runner_id, "umu")
     source_id = _select_source_profile(
         capsule_path,
         backend="umu",
         profile_id=source_profile_id,
     )
-    runtime = _select_shared_umu_runtime(
-        collection_root,
-        runner,
-    )
+
+    # Determine source kind before touching shared runtime resolution.
+    # A preserved umu-native profile carries its own runtime + backend
+    # references inside the capsule and does NOT need a matching global
+    # UMU component composition; forcing that check up front would
+    # block valid umu-native materializations (e.g. DMC5 with a
+    # preserved Proton whose steamrt family is not otherwise present).
+    source_capsule_doc = _load_json(capsule_path, "capsule.json")
+    try:
+        source_profile_doc = next(
+            profile
+            for profile in _linux_profiles(source_capsule_doc)
+            if profile.get("id") == source_id
+        )
+    except StopIteration as exc:
+        raise CompositionError(
+            f"Selected source profile {source_id!r} vanished between "
+            "selection and lookup."
+        ) from exc
+    source_kind = _source_kind(capsule_path, source_profile_doc)
 
     destination = destination.expanduser()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -2106,13 +2137,27 @@ def compose_umu(
         prefix=".ogv-control-umu-",
         dir=destination.parent,
     ) as temporary:
-        operational_capsule, profile_id = _umu_overlay(
-            source_capsule_path=capsule_path,
-            source_profile_id=source_id,
-            runner=runner,
-            runtime=runtime,
-            output=Path(temporary) / "capsule",
-        )
+        if source_kind == "umu-native":
+            # Preserved rich contract; no overlay. The capsule itself
+            # is the operational capsule and provisions its own state
+            # from umu.state_archives.
+            operational_capsule = capsule_path
+            profile_id = source_id
+            require_state_backup = False
+            runtime = None
+        else:
+            runtime = _select_shared_umu_runtime(
+                collection_root,
+                runner,
+            )
+            operational_capsule, profile_id = _umu_overlay(
+                source_capsule_path=capsule_path,
+                source_profile_id=source_id,
+                runner=runner,
+                runtime=runtime,
+                output=Path(temporary) / "capsule",
+            )
+            require_state_backup = True
         digests = _capsule_object_digests(operational_capsule)
         try:
             validate_manifests_present_for(
@@ -2126,7 +2171,7 @@ def compose_umu(
             vault_root=vault_root,
             destination=destination,
             state_backup=state_backup,
-            require_state_backup=True,
+            require_state_backup=require_state_backup,
             state_capsule_path=capsule_path,
         )
         try:
@@ -2177,16 +2222,19 @@ def compose_umu(
         play_complete=play_complete,
         backend_result={
             "materialization": asdict(result),
-            "component_set_id": runtime.component_set_id,
+            "component_set_id": (
+                runtime.component_set_id if runtime else None
+            ),
             "backend_component_id": (
-                runtime.backend_object_id
+                runtime.backend_object_id if runtime else None
             ),
             "runtime_component_id": (
-                runtime.runtime_object_id
+                runtime.runtime_object_id if runtime else None
             ),
             "backend_entrypoint": (
-                runtime.backend_entrypoint
+                runtime.backend_entrypoint if runtime else None
             ),
+            "source_kind": source_kind,
             "play": play_result,
         },
     )
