@@ -554,49 +554,6 @@ def _capsule_object_digests(operational_capsule: Path) -> list[str]:
     return digests
 
 
-def _top_level_prefixes(values: list[Any]) -> set[str]:
-    """Return the set of first path segments from a list of path-like values."""
-    prefixes: set[str] = set()
-    for value in values:
-        if not isinstance(value, str) or not value:
-            continue
-        first = value.split("/", 1)[0]
-        if first:
-            prefixes.add(first)
-    return prefixes
-
-
-def _object_prefixes_from_playable(destination: Path) -> set[str]:
-    """Top-level directories at destination that hold object content."""
-    receipt = json.loads(
-        (destination / _PLAYABLE_RECEIPT_NAME).read_text(encoding="utf-8")
-    )
-    paths = receipt.get("paths", {})
-    return _top_level_prefixes(
-        [paths.get(key) for key in ("prefix", "runner", "runtime")]
-    )
-
-
-def _object_prefixes_from_umu(destination: Path) -> set[str]:
-    receipt = json.loads(
-        (destination / _UMU_RECEIPT_NAME).read_text(encoding="utf-8")
-    )
-    paths = receipt.get("paths", {})
-    return _top_level_prefixes(
-        [paths.get(key) for key in ("prefix", "runner", "runtime")]
-    )
-
-
-def _object_prefixes_from_bottles(destination: Path) -> set[str]:
-    receipt = json.loads(
-        (destination / _BOTTLES_RECEIPT_NAME).read_text(encoding="utf-8")
-    )
-    layout = receipt.get("layout", {})
-    return _top_level_prefixes(
-        [layout.get(key) for key in ("prefix", "game")]
-    )
-
-
 def _rollback_destination(destination: Path) -> None:
     """Remove ``destination`` on manifest-travel failure, best-effort.
 
@@ -670,16 +627,15 @@ def compose_wine(
             state_capsule_path=capsule_path,
         )
         try:
-            copy_manifests_to_materialization(
+            copied_manifests = copy_manifests_to_materialization(
                 vault_root=vault_root,
                 destination=destination,
                 digests=digests,
             )
-            prefixes = _object_prefixes_from_playable(destination)
             receipt_path = destination / _PLAYABLE_RECEIPT_NAME
             write_generated_files_manifest(
                 destination=destination,
-                object_owned_prefixes=prefixes,
+                object_manifest_paths=copied_manifests,
                 excluded_paths={
                     receipt_path.with_name(receipt_path.name + ".sha256")
                 },
@@ -1076,16 +1032,15 @@ def compose_bottles(
                 state_capsule_path=capsule_path,
             )
             try:
-                copy_manifests_to_materialization(
+                copied_manifests = copy_manifests_to_materialization(
                     vault_root=vault_root,
                     destination=destination,
                     digests=digests,
                 )
-                prefixes = _object_prefixes_from_bottles(destination)
                 receipt_path = destination / _BOTTLES_RECEIPT_NAME
                 write_generated_files_manifest(
                     destination=destination,
-                    object_owned_prefixes=prefixes,
+                    object_manifest_paths=copied_manifests,
                     excluded_paths={
                         receipt_path.with_name(
                             receipt_path.name + ".sha256"
@@ -2175,16 +2130,15 @@ def compose_umu(
             state_capsule_path=capsule_path,
         )
         try:
-            copy_manifests_to_materialization(
+            copied_manifests = copy_manifests_to_materialization(
                 vault_root=vault_root,
                 destination=destination,
                 digests=digests,
             )
-            prefixes = _object_prefixes_from_umu(destination)
             receipt_path = destination / _UMU_RECEIPT_NAME
             write_generated_files_manifest(
                 destination=destination,
-                object_owned_prefixes=prefixes,
+                object_manifest_paths=copied_manifests,
                 excluded_paths={
                     receipt_path.with_name(receipt_path.name + ".sha256")
                 },

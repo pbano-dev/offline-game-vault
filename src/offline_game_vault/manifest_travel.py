@@ -27,6 +27,7 @@ rejected. The layer stays open to the presence of unknown material.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from datetime import datetime, timezone
 import hashlib
@@ -41,6 +42,7 @@ from .object_manifest import (
     ObjectManifestError,
     manifest_path,
     manifest_sidecar_path,
+    read_manifest,
 )
 
 
@@ -129,19 +131,31 @@ def copy_manifests_to_materialization(
 def write_generated_files_manifest(
     *,
     destination: Path,
-    object_owned_prefixes: set[str],
+    object_manifest_paths: Iterable[Path],
     excluded_paths: set[Path] | None = None,
 ) -> Path:
     """Hash every "generated" file at the destination into a single manifest.
 
-    A file is "generated" when it is a regular file whose top-level
-    destination-relative component is NOT one of ``object_owned_prefixes``
-    (subtrees planted by object extraction) and whose absolute path is NOT
-    in ``excluded_paths`` (self-references such as receipt sidecars).
+    Classification is by CONTENT, not by top-level path prefix. The
+    per-object manifests that just travelled to the destination are
+    loaded and turned into a ``Counter[(size, sha256_hex)]`` catalogue of
+    expected object content. Every regular file at the destination is
+    hashed once; if its ``(size, hex)`` appears in the catalogue with
+    remaining count, it is object content and skipped; otherwise it is
+    written by the composition itself (or added by the user), and gets an
+    entry in ``metadata/generated-files.json``.
 
-    Extra files a user may have added by hand fall into the generated
-    bucket and are hashed; they are recorded, not rejected. This keeps the
-    layer "based on existence", not enumeration.
+    This model works uniformly across backends: Direct-Wine keeps the
+    file paths declared in the manifest, Bottles produces a bottle
+    subtree, and UMU rebases and mixes object content into a synthetic
+    tree — content-based classification catches all three without any
+    per-backend layout knowledge.
+
+    ``excluded_paths`` still names self-references (typically the
+    receipt sidecars this module writes right after). The manifests
+    subtree ``metadata/manifests/**`` and the generated-files manifest
+    itself are excluded automatically; the caller does not need to name
+    them.
     """
     destination = destination.expanduser().resolve()
     manifest_file = destination / GENERATED_FILES_MANIFEST
@@ -149,26 +163,30 @@ def write_generated_files_manifest(
     excluded.add(manifest_file.resolve())
     manifests_subtree = (destination / MANIFESTS_SUBTREE).resolve()
 
+    catalog = _load_object_content_catalog(object_manifest_paths)
+
     entries: list[dict[str, object]] = []
     for absolute in sorted(_walk_regular_files(destination)):
         relative = absolute.relative_to(destination)
-        top = relative.parts[0] if relative.parts else ""
-        if top in object_owned_prefixes:
-            continue
         if absolute in excluded:
             continue
-        # ``metadata/manifests/**`` is excluded by prefix: it has its own
-        # sidecar integrity, so re-hashing it here is noise.
+        # ``metadata/manifests/**`` has its own sidecar integrity; skip.
         try:
             absolute.relative_to(manifests_subtree)
             continue
         except ValueError:
             pass
+        size = absolute.stat().st_size
+        digest_hex = _sha256_file(absolute)
+        key = (size, digest_hex)
+        if catalog.get(key, 0) > 0:
+            catalog[key] -= 1
+            continue
         entries.append(
             {
                 "path": relative.as_posix(),
-                "sha256": _sha256_file(absolute),
-                "bytes": absolute.stat().st_size,
+                "sha256": digest_hex,
+                "bytes": size,
             }
         )
 
@@ -185,6 +203,32 @@ def write_generated_files_manifest(
     )
     manifest_file.write_text(payload, encoding="utf-8")
     return manifest_file
+
+
+def _load_object_content_catalog(
+    object_manifest_paths: Iterable[Path],
+) -> Counter[tuple[int, str]]:
+    """Build a ``Counter[(size, hex)] -> expected_count`` from manifests.
+
+    Sidecar paths in the input are ignored (identified by the ``.sha256``
+    suffix), so the caller can pass the raw list returned by
+    ``copy_manifests_to_materialization`` unfiltered. Manifests that
+    cannot be read are skipped silently: their absence at verification
+    time will surface via fase 5's manifest sidecar check, so failing
+    hard here would only duplicate that signal.
+    """
+    catalog: Counter[tuple[int, str]] = Counter()
+    for path in object_manifest_paths:
+        if path.name.endswith(".sha256"):
+            continue
+        try:
+            manifest = read_manifest(path)
+        except ObjectManifestError:
+            continue
+        for entry in manifest.entries:
+            hex_digest = entry.digest.removeprefix("sha256:")
+            catalog[(entry.size, hex_digest)] += 1
+    return catalog
 
 
 # ------------------------------------------------- receipt sidecar

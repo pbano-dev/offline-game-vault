@@ -141,24 +141,88 @@ class ManifestTravelTests(unittest.TestCase):
 
     # ------------------------------------------- generated-files manifest
 
-    def test_generated_files_excludes_object_owned_prefixes(self) -> None:
-        # Set up a destination with two "top-levels": prefix/ (from object)
-        # and generated files at root and under metadata/.
+    def _write_fake_object_manifest(
+        self,
+        entries: list[tuple[str, bytes]],
+        *,
+        object_digest: str | None = None,
+    ) -> "Path":
+        """Write a canonical object manifest under metadata/manifests/.
+
+        ``entries`` is a list of ``(relative_path_in_object, content)``.
+        The hash of each content is used for the entry. Returns the
+        manifest path so the test can pass it to
+        ``write_generated_files_manifest``.
+        """
+        from pathlib import Path
+        if object_digest is None:
+            object_digest = "sha256:" + "0" * 63 + "a"
+        hex_digest = object_digest.removeprefix("sha256:")
+        target = (
+            self.destination / MANIFESTS_SUBTREE / "sha256"
+            / hex_digest[:2] / hex_digest[2:4] / hex_digest
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        header_lines = [
+            "manifest_schema:0",
+            f"object_digest:{object_digest}",
+            "object_size:0",
+            "generated_at:2026-01-01T00:00:00Z",
+            "generator:test",
+            f"file_count:{len(entries)}",
+            f"total_bytes:{sum(len(c) for _, c in entries)}",
+        ]
+        body_lines = [
+            f"{_sha256_bytes(content)} {len(content)} {path}"
+            for path, content in entries
+        ]
+        text = "\n".join(header_lines) + "\n\n" + "\n".join(body_lines)
+        if body_lines:
+            text += "\n"
+        payload = text.encode("utf-8")
+        target.write_bytes(payload)
+        target.with_name(target.name + ".sha256").write_text(
+            f"{_sha256_bytes(payload)}  {target.name}\n",
+            encoding="utf-8",
+        )
+        return target
+
+    def test_generated_files_excludes_object_content_by_hash(self) -> None:
+        """Object content is classified by (size, hash), not by path.
+
+        A file whose bytes match a manifest entry is excluded from
+        generated-files.json even if its destination path bears no
+        resemblance to the path declared in the manifest. This is the
+        UMU case in miniature: the materializer rebases and mixes
+        object content, and the path in the manifest does not survive.
+        """
         self.destination.mkdir()
-        (self.destination / "prefix").mkdir()
-        (self.destination / "prefix/inside.txt").write_bytes(b"from-object\n")
-        (self.destination / "JUGAR.sh").write_bytes(b"#!/bin/sh\nexit 0\n")
-        (self.destination / "metadata").mkdir()
-        (self.destination / "metadata/receipt.json").write_bytes(b"{}\n")
+        content = b"payload content\n"
+        # Manifest declares the file at payload/game/thing.bin.
+        manifest_path = self._write_fake_object_manifest(
+            [("payload/game/thing.bin", content)]
+        )
+        # Destination writes it at prefix/drive_c/Games/thing.bin (rebased).
+        (self.destination / "prefix/drive_c/Games").mkdir(parents=True)
+        (self.destination / "prefix/drive_c/Games/thing.bin").write_bytes(
+            content
+        )
+        # Plus a real generated file at root.
+        (self.destination / "JUGAR.sh").write_bytes(b"#!/bin/sh\n")
         manifest_file = write_generated_files_manifest(
             destination=self.destination,
-            object_owned_prefixes={"prefix"},
+            object_manifest_paths=[manifest_path],
         )
-        document = json.loads(manifest_file.read_text(encoding="utf-8"))
-        paths = [entry["path"] for entry in document["files"]]
+        paths = [
+            e["path"]
+            for e in json.loads(manifest_file.read_text())["files"]
+        ]
         self.assertIn("JUGAR.sh", paths)
-        self.assertIn("metadata/receipt.json", paths)
-        self.assertNotIn("prefix/inside.txt", paths)
+        # Object content is NOT in generated-files, despite its path
+        # having no top-level match against the manifest declaration.
+        self.assertNotIn(
+            "prefix/drive_c/Games/thing.bin", paths
+        )
 
     def test_generated_files_excludes_manifests_subtree(self) -> None:
         self.destination.mkdir()
@@ -167,7 +231,7 @@ class ManifestTravelTests(unittest.TestCase):
         (self.destination / "JUGAR.sh").write_bytes(b"#!/bin/sh\n")
         manifest_file = write_generated_files_manifest(
             destination=self.destination,
-            object_owned_prefixes=set(),
+            object_manifest_paths=[],
         )
         paths = [
             e["path"]
@@ -184,7 +248,7 @@ class ManifestTravelTests(unittest.TestCase):
         (self.destination / "JUGAR.sh").write_bytes(b"#!/bin/sh\n")
         manifest_file = write_generated_files_manifest(
             destination=self.destination,
-            object_owned_prefixes=set(),
+            object_manifest_paths=[],
         )
         paths = [
             e["path"]
@@ -199,7 +263,7 @@ class ManifestTravelTests(unittest.TestCase):
         (self.destination / "JUGAR.sh").write_bytes(payload)
         manifest_file = write_generated_files_manifest(
             destination=self.destination,
-            object_owned_prefixes=set(),
+            object_manifest_paths=[],
         )
         document = json.loads(manifest_file.read_text(encoding="utf-8"))
         entry = next(
@@ -213,13 +277,36 @@ class ManifestTravelTests(unittest.TestCase):
         (self.destination / "JUGAR.sh").write_bytes(b"#!/bin/sh\n")
         manifest_file = write_generated_files_manifest(
             destination=self.destination,
-            object_owned_prefixes=set(),
+            object_manifest_paths=[],
         )
         paths = [
             e["path"]
             for e in json.loads(manifest_file.read_text())["files"]
         ]
         self.assertNotIn(GENERATED_FILES_MANIFEST, paths)
+
+    def test_sidecar_paths_in_input_are_ignored(self) -> None:
+        """Callers may pass the raw list from copy_manifests_to_materialization
+        which interleaves manifest + sidecar; the sidecars are filtered out
+        of the catalogue build so no spurious matches happen."""
+        self.destination.mkdir()
+        content = b"payload content\n"
+        manifest_path = self._write_fake_object_manifest(
+            [("payload/thing.bin", content)]
+        )
+        sidecar_path = manifest_path.with_name(
+            manifest_path.name + ".sha256"
+        )
+        (self.destination / "thing.bin").write_bytes(content)
+        manifest_file = write_generated_files_manifest(
+            destination=self.destination,
+            object_manifest_paths=[manifest_path, sidecar_path],
+        )
+        paths = [
+            e["path"]
+            for e in json.loads(manifest_file.read_text())["files"]
+        ]
+        self.assertNotIn("thing.bin", paths)
 
     # ----------------------------------------------- receipt sidecar
 

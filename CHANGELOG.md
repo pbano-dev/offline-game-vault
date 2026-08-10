@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.15.0 — 2026-08-10
+
+### Changed
+
+- ``metadata/generated-files.json`` now classifies files by content, not
+  by top-level path prefix. When a materialization publishes, the
+  per-object manifests that just travelled to
+  ``metadata/manifests/`` are loaded into a
+  ``Counter[(size, sha256_hex)]`` catalogue; every regular file at the
+  destination whose ``(size, hex)`` appears in the catalogue is treated
+  as preserved object content and skipped, and the rest — composition
+  launchers, receipts, runtime helpers, and any file a user added by
+  hand — becomes an entry in the manifest.
+
+  The old model derived "object-owned prefixes" from each backend's
+  primary receipt (``paths.prefix``, ``paths.runner``, ``paths.runtime``
+  or ``layout.prefix``, ``layout.game``). It worked for Direct-Wine and
+  Bottles, where files land under a predictable subtree, but silently
+  degenerated on UMU: the materializer rebases and mixes object content
+  into a synthetic tree, and ``paths.prefix`` covered only a fraction
+  of it. A Sims 2 UMU compose ended up with 27691 entries in
+  ``generated-files.json`` — most of them object content misclassified
+  as generated — and zero object files matched during verification.
+
+- ``write_generated_files_manifest`` takes ``object_manifest_paths``
+  instead of ``object_owned_prefixes``. Callers pass the paths returned
+  by ``copy_manifests_to_materialization``; the function silently
+  filters sidecars out of the catalogue build.
+
+- The three ``_object_prefixes_from_*`` helpers in ``composition.py``
+  were removed. The three ``compose_*`` no longer inspect the primary
+  receipt for prefix hints; the copied manifests carry the information
+  the classifier needs.
+
+### Fixed
+
+- Fase 4's evidence is honest across backends. ``generated-files.json``
+  contains a handful of entries for the launchers, receipts, and
+  runtime helpers the composition actually authored, on Direct-Wine,
+  Bottles, and UMU alike.
+
 ## 0.14.0 — 2026-08-09
 
 ### Added
