@@ -2089,6 +2089,28 @@ def _umu_overlay(
     capsule_path = output / "capsule.json"
     capsule_path.write_bytes(_canonical_bytes(capsule))
     return capsule_path, profile_id
+def _derive_state_root_for_umu_native(
+    collection_root: Path,
+    capsule_doc: dict[str, Any],
+) -> Path | None:
+    """Return the canonical state_root for a umu-native capsule.
+
+    Convention documented in ARCHITECTURE.md: preserved
+    ``umu.state_archives`` tarballs live at
+    ``<collection_root>/03_PERSISTENT_STATE/<capsule_id>/``. When
+    the directory exists it is returned; when it does not, ``None``
+    is returned so ``materialize_umu_profile`` surfaces its own
+    error naming the concrete argument the user must supply.
+    """
+    capsule_id = capsule_doc.get("capsule_id")
+    if not isinstance(capsule_id, str) or not capsule_id:
+        return None
+    candidate = (
+        collection_root / "03_PERSISTENT_STATE" / capsule_id
+    )
+    return candidate if candidate.is_dir() else None
+
+
 def compose_umu(
     *,
     collection_root: Path,
@@ -2097,6 +2119,8 @@ def compose_umu(
     destination: Path,
     source_profile_id: str | None = None,
     state_backup: Path | None = None,
+    state_root: Path | None = None,
+    save_id: str | None = None,
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
@@ -2140,12 +2164,26 @@ def compose_umu(
         if source_kind == "umu-native":
             # Preserved rich contract; no overlay. The capsule itself
             # is the operational capsule and provisions its own state
-            # from umu.state_archives.
+            # from umu.state_archives, whose tarballs live in the
+            # convention path 03_PERSISTENT_STATE/<capsule_id>/
+            # unless the caller overrides via --state-root.
             operational_capsule = capsule_path
             profile_id = source_id
             require_state_backup = False
             runtime = None
+            if state_root is None:
+                state_root = _derive_state_root_for_umu_native(
+                    collection_root, source_capsule_doc
+                )
         else:
+            if state_root is not None or save_id is not None:
+                raise CompositionError(
+                    "--state-root and --save-id apply only to "
+                    "capsules with a preserved UMU rich contract; "
+                    "the selected source profile synthesizes its "
+                    "contract from global components and has no "
+                    "state_archives to place."
+                )
             runtime = _select_shared_umu_runtime(
                 collection_root,
                 runner,
@@ -2171,6 +2209,8 @@ def compose_umu(
             vault_root=vault_root,
             destination=destination,
             state_backup=state_backup,
+            state_root=state_root,
+            save_id=save_id,
             require_state_backup=require_state_backup,
             state_capsule_path=capsule_path,
         )

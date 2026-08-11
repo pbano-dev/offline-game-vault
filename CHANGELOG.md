@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.17.0 — 2026-08-11
+
+### Added
+
+- ``compose`` gains two new arguments applicable to ``--backend umu``:
+  ``--state-root PATH`` and ``--save-id ID``. They control how the
+  preserved ``umu.state_archives`` of a umu-native capsule are placed
+  during materialization: ``--state-root`` names the directory holding
+  the archive tarballs, and ``--save-id`` picks a selectable save
+  policy in addition to any ``always`` archives.
+
+- When ``--state-root`` is omitted, ``compose_umu`` derives it from the
+  documented convention:
+  ``<collection_root>/03_PERSISTENT_STATE/<capsule_id>/``. When that
+  directory exists it is used automatically; when it does not, the
+  argument is left unset and the materializer's own error surfaces the
+  concrete argument the user must supply. Zero configuration for the
+  canonical layout, explicit override for anything else.
+
+### Fixed
+
+- Capsules with a preserved UMU rich contract that also declare
+  ``state_archives`` with an ``always`` policy — such as Devil May
+  Cry 5, whose ``dmc5-required-configuration-v1.tar.zst`` provisions
+  a required baseline configuration — are no longer blocked by the
+  materializer's ``--state-root is required by the UMU contract``
+  error immediately after fase 6 succeeded in routing them through
+  compose. Fase 6 opened the door; 0.17.0 hands the visitor the key.
+
+### Changed
+
+- ``compose_umu`` rejects ``--state-root`` and ``--save-id`` explicitly
+  when the selected source profile is not umu-native, because
+  synthesized UMU contracts have no ``state_archives`` to place and
+  silently ignoring the arguments would misrepresent user intent.
+- The CLI layer rejects the same arguments upfront when
+  ``--backend`` is not ``umu``, before any composition work begins.
+
 ## 0.16.0 — 2026-08-10
 
 ### Added

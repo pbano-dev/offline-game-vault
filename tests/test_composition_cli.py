@@ -287,5 +287,50 @@ class CompositionCliTests(
         )
 
 
+class UmuStateArgsCrossBackendTests(unittest.TestCase):
+    """Guard: --state-root and --save-id are UMU-only.
+
+    They name concepts (preserved state_archives, save selection)
+    that have no equivalent under direct-wine or Bottles. Passing
+    them with the wrong backend must be rejected explicitly, before
+    any composition work begins.
+    """
+
+    def _run(self, argv: list[str]) -> tuple[int, str]:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(argv)
+        return code, stderr.getvalue()
+
+    def test_state_root_rejected_for_direct_wine(self) -> None:
+        code, err = self._run([
+            "compose",
+            "--collection-root", "/tmp/nowhere",
+            "--capsule", "/tmp/nowhere/capsule.json",
+            "--backend", "direct-wine",
+            "--runner", "fake-runner",
+            "--destination", "/tmp/dest",
+            "--state-root", "/tmp/state",
+        ])
+        self.assertNotEqual(code, 0)
+        self.assertIn("--state-root", err)
+        self.assertIn("direct-wine", err)
+
+    def test_save_id_rejected_for_bottles(self) -> None:
+        code, err = self._run([
+            "compose",
+            "--collection-root", "/tmp/nowhere",
+            "--capsule", "/tmp/nowhere/capsule.json",
+            "--backend", "bottles",
+            "--runner", "fake-runner",
+            "--destination", "/tmp/dest",
+            "--bottle-name", "fake",
+            "--save-id", "main-save",
+        ])
+        self.assertNotEqual(code, 0)
+        self.assertIn("--save-id", err)
+        self.assertIn("bottles", err)
+
+
 if __name__ == "__main__":
     unittest.main()

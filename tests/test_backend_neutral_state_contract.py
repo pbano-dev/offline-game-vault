@@ -48,6 +48,8 @@ class BackendNeutralStateContractTests(unittest.TestCase):
             source_profile=None,
             destination=self.destination,
             state_backup=self.state_backup,
+            state_root=None,
+            save_id=None,
             bottles_path=(
                 self.bottles_path
                 if backend == "bottles"

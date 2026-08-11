@@ -1766,6 +1766,21 @@ def _command_discover_bottles_path(args: argparse.Namespace) -> int:
 
 
 def _command_compose(args: argparse.Namespace) -> int:
+    # Cross-backend validation: --state-root and --save-id only apply
+    # to UMU; they name concepts (preserved state_archives, save
+    # selection) that have no equivalent under direct-wine or
+    # Bottles.
+    if args.backend != "umu":
+        if args.state_root is not None:
+            raise CompositionError(
+                "--state-root is only supported for --backend umu, "
+                f"not {args.backend}."
+            )
+        if args.save_id is not None:
+            raise CompositionError(
+                "--save-id is only supported for --backend umu, "
+                f"not {args.backend}."
+            )
     common = {
         "collection_root": args.collection_root,
         "capsule_path": args.capsule,
@@ -1795,6 +1810,8 @@ def _command_compose(args: argparse.Namespace) -> int:
             **common,
             destination=args.destination,
             state_backup=args.state_backup,
+            state_root=args.state_root,
+            save_id=args.save_id,
             arguments=forwarded,
         )
     else:
@@ -2921,6 +2938,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--destination",
         type=Path,
         help="New external materialization destination.",
+    )
+    composition_parser.add_argument(
+        "--state-root",
+        type=Path,
+        help=(
+            "Directory holding preserved umu.state_archives tarballs. "
+            "Only valid with --backend umu against a capsule that ships "
+            "a preserved UMU rich contract. Defaults to "
+            "<collection_root>/03_PERSISTENT_STATE/<capsule_id>/ when "
+            "that directory exists."
+        ),
+    )
+    composition_parser.add_argument(
+        "--save-id",
+        help=(
+            "ID of the selectable state archive to include (in "
+            "addition to any 'always' archives). Only valid with "
+            "--backend umu against a preserved UMU rich contract."
+        ),
     )
     composition_parser.add_argument(
         "--state-backup",

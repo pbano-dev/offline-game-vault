@@ -1218,5 +1218,60 @@ class SourceKindTests(unittest.TestCase):
         )
 
 
+class StateRootDerivationTests(unittest.TestCase):
+    """Unit tests for the canonical state_root derivation used by
+    umu-native composes when the caller omits --state-root."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tempdir.name)
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_derives_when_directory_exists(self) -> None:
+        from offline_game_vault.composition import (
+            _derive_state_root_for_umu_native,
+        )
+        (self.root / "03_PERSISTENT_STATE/some-capsule").mkdir(
+            parents=True
+        )
+        result = _derive_state_root_for_umu_native(
+            self.root, {"capsule_id": "some-capsule"}
+        )
+        self.assertEqual(
+            result,
+            self.root / "03_PERSISTENT_STATE/some-capsule",
+        )
+
+    def test_returns_none_when_directory_absent(self) -> None:
+        """When the canonical directory does not exist, return None
+        so the materializer surfaces its concrete error message
+        instead of silently pointing at a phantom directory."""
+        from offline_game_vault.composition import (
+            _derive_state_root_for_umu_native,
+        )
+        result = _derive_state_root_for_umu_native(
+            self.root, {"capsule_id": "missing-capsule"}
+        )
+        self.assertIsNone(result)
+
+    def test_returns_none_when_capsule_id_absent(self) -> None:
+        from offline_game_vault.composition import (
+            _derive_state_root_for_umu_native,
+        )
+        result = _derive_state_root_for_umu_native(self.root, {})
+        self.assertIsNone(result)
+
+    def test_returns_none_when_capsule_id_is_not_a_string(self) -> None:
+        from offline_game_vault.composition import (
+            _derive_state_root_for_umu_native,
+        )
+        result = _derive_state_root_for_umu_native(
+            self.root, {"capsule_id": 123}
+        )
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()
