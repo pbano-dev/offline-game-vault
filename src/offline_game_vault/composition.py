@@ -2092,21 +2092,35 @@ def _umu_overlay(
 def _derive_state_root_for_umu_native(
     collection_root: Path,
     capsule_doc: dict[str, Any],
+    profile_id: str,
 ) -> Path | None:
     """Return the canonical state_root for a umu-native capsule.
 
-    Convention documented in ARCHITECTURE.md: preserved
-    ``umu.state_archives`` tarballs live at
-    ``<collection_root>/03_PERSISTENT_STATE/<capsule_id>/``. When
-    the directory exists it is returned; when it does not, ``None``
-    is returned so ``materialize_umu_profile`` surfaces its own
-    error naming the concrete argument the user must supply.
+    Convention: preserved ``umu.state_archives`` tarballs live at
+    ``<collection_root>/03_PERSISTENT_STATE/<capsule_id>/
+    <profile_id>/active/``. The nested ``<profile_id>/`` segment
+    accommodates capsules that ship more than one UMU profile
+    (each with its own preserved tarballs), and the ``active/``
+    leaf separates the operative tarballs from the paralell
+    ``related-artifacts/`` subtree that carries preserved evidence
+    which is intentionally NOT consumed during materialisation.
+
+    When the directory exists it is returned; when it does not,
+    ``None`` is returned so ``materialize_umu_profile`` surfaces
+    its own error naming the concrete argument the user must
+    supply via ``--state-root``.
     """
     capsule_id = capsule_doc.get("capsule_id")
     if not isinstance(capsule_id, str) or not capsule_id:
         return None
+    if not isinstance(profile_id, str) or not profile_id:
+        return None
     candidate = (
-        collection_root / "03_PERSISTENT_STATE" / capsule_id
+        collection_root
+        / "03_PERSISTENT_STATE"
+        / capsule_id
+        / profile_id
+        / "active"
     )
     return candidate if candidate.is_dir() else None
 
@@ -2173,7 +2187,9 @@ def compose_umu(
             runtime = None
             if state_root is None:
                 state_root = _derive_state_root_for_umu_native(
-                    collection_root, source_capsule_doc
+                    collection_root,
+                    source_capsule_doc,
+                    source_id,
                 )
         else:
             if state_root is not None or save_id is not None:

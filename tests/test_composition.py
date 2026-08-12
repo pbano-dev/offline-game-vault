@@ -1220,7 +1220,11 @@ class SourceKindTests(unittest.TestCase):
 
 class StateRootDerivationTests(unittest.TestCase):
     """Unit tests for the canonical state_root derivation used by
-    umu-native composes when the caller omits --state-root."""
+    umu-native composes when the caller omits --state-root.
+
+    Convention:
+        03_PERSISTENT_STATE/<capsule_id>/<profile_id>/active/
+    """
 
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -1229,30 +1233,45 @@ class StateRootDerivationTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def test_derives_when_directory_exists(self) -> None:
+    def _active_dir(
+        self, capsule_id: str, profile_id: str
+    ) -> Path:
+        return (
+            self.root
+            / "03_PERSISTENT_STATE"
+            / capsule_id
+            / profile_id
+            / "active"
+        )
+
+    def test_derives_when_active_dir_exists(self) -> None:
         from offline_game_vault.composition import (
             _derive_state_root_for_umu_native,
         )
+        active = self._active_dir("some-capsule", "linux-umu-x")
+        active.mkdir(parents=True)
+        result = _derive_state_root_for_umu_native(
+            self.root,
+            {"capsule_id": "some-capsule"},
+            "linux-umu-x",
+        )
+        self.assertEqual(result, active)
+
+    def test_returns_none_when_active_dir_absent(self) -> None:
+        """When the canonical directory does not exist, return None
+        so the materializer surfaces its concrete error message."""
+        from offline_game_vault.composition import (
+            _derive_state_root_for_umu_native,
+        )
+        # Only up to <capsule_id>/ exists; the profile's active/
+        # subtree is absent.
         (self.root / "03_PERSISTENT_STATE/some-capsule").mkdir(
             parents=True
         )
         result = _derive_state_root_for_umu_native(
-            self.root, {"capsule_id": "some-capsule"}
-        )
-        self.assertEqual(
-            result,
-            self.root / "03_PERSISTENT_STATE/some-capsule",
-        )
-
-    def test_returns_none_when_directory_absent(self) -> None:
-        """When the canonical directory does not exist, return None
-        so the materializer surfaces its concrete error message
-        instead of silently pointing at a phantom directory."""
-        from offline_game_vault.composition import (
-            _derive_state_root_for_umu_native,
-        )
-        result = _derive_state_root_for_umu_native(
-            self.root, {"capsule_id": "missing-capsule"}
+            self.root,
+            {"capsule_id": "some-capsule"},
+            "linux-umu-x",
         )
         self.assertIsNone(result)
 
@@ -1260,15 +1279,29 @@ class StateRootDerivationTests(unittest.TestCase):
         from offline_game_vault.composition import (
             _derive_state_root_for_umu_native,
         )
-        result = _derive_state_root_for_umu_native(self.root, {})
+        result = _derive_state_root_for_umu_native(
+            self.root, {}, "linux-umu-x"
+        )
         self.assertIsNone(result)
 
-    def test_returns_none_when_capsule_id_is_not_a_string(self) -> None:
+    def test_returns_none_when_capsule_id_bad_type(self) -> None:
         from offline_game_vault.composition import (
             _derive_state_root_for_umu_native,
         )
         result = _derive_state_root_for_umu_native(
-            self.root, {"capsule_id": 123}
+            self.root, {"capsule_id": 123}, "linux-umu-x"
+        )
+        self.assertIsNone(result)
+
+    def test_returns_none_when_profile_id_absent(self) -> None:
+        from offline_game_vault.composition import (
+            _derive_state_root_for_umu_native,
+        )
+        # Even with an existing active/ subtree, an empty profile_id
+        # should not resolve to a candidate — it would collapse the
+        # profile segment and point at the wrong directory.
+        result = _derive_state_root_for_umu_native(
+            self.root, {"capsule_id": "some-capsule"}, ""
         )
         self.assertIsNone(result)
 

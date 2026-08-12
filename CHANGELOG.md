@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.17.1 — 2026-08-12
+
+### Fixed
+
+- The state_root auto-derivation added in 0.17.0 pointed at
+  ``03_PERSISTENT_STATE/<capsule_id>/`` and expected preserved
+  ``umu.state_archives`` tarballs to live directly at that path. The
+  real convention places them two segments deeper —
+  ``03_PERSISTENT_STATE/<capsule_id>/<profile_id>/active/`` — so the
+  materializer could not find them and failed with
+  ``State archive <id> is absent or not a regular file.`` immediately
+  after fase 6 routed the composition correctly. This release fixes
+  the auto-derivation path.
+
+- The nested ``<profile_id>/`` segment accommodates capsules that ship
+  more than one UMU profile with their own preserved tarballs; the
+  ``active/`` leaf separates the operative tarballs from the parallel
+  ``related-artifacts/`` subtree, which carries preserved evidence
+  intentionally kept out of the materialisation.
+
+### Changed
+
+- ``_derive_state_root_for_umu_native`` gains a required ``profile_id``
+  argument (an internal helper; the CLI surface is unchanged). Its
+  unit tests are updated for the new signature and directory shape.
+
 ## 0.17.0 — 2026-08-11
 
 ### Added
