@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.18.0 — 2026-08-13
+
+### Added
+
+- New CLI command ``ogv migrate-bottles-contract --capsule PATH``.
+  Rewrites a capsule's legacy Bottles host-contract (with
+  ``contract_id`` and no ``contract``) into the modern neutral shape
+  ``ogv-bottles-neutral-v1`` by reusing the same synthesis that
+  ``compose_bottles`` performs at composition time
+  (``_neutral_fields_from_playable``). The result is persisted as
+  ``host-contracts/linux-bottles-neutral.json``; the legacy file is
+  deleted; ``capsule.json`` is updated to point at the new file. A
+  ``derived_from`` block inside the new contract preserves the
+  legacy ``contract_id`` and the source playable profile id as an
+  audit trail.
+
+- Idempotent by design: running the migrator against an
+  already-migrated capsule reports the state without touching any
+  file. ``--dry-run`` prints the planned changes without writing.
+  ``--force`` overwrites an existing modern contract at the
+  destination.
+
+- Rationale: the composition layer today carries
+  ``_neutral_fields_from_playable`` as a bridge for historical
+  capsules whose Bottles profile still uses the pre-neutral
+  contract shape. Persisting the synthesis lets those capsules
+  reach ``compose_bottles`` via the modern ``ogv-bottles-neutral-v1``
+  path, so the bridge can be retired without breaking any capsule.
+  The three legacy capsules in the reference vault (Dark Souls
+  Remastered, Dark Souls III, Sekiro) are the intended targets;
+  after the migrator lands, the composition bridge becomes
+  removable in a follow-up cycle.
+
 ## 0.17.1 — 2026-08-12
 
 ### Fixed

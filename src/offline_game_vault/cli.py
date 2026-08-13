@@ -1765,6 +1765,57 @@ def _command_discover_bottles_path(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_migrate_bottles_contract(
+    args: argparse.Namespace,
+) -> int:
+    from .bottles_adapter import DEFAULT_FLATPAK_APP
+    from .capsule_migrator import (
+        MigrationError,
+        migrate_bottles_contract,
+    )
+
+    flatpak_app = args.flatpak_app or DEFAULT_FLATPAK_APP
+    try:
+        report = migrate_bottles_contract(
+            capsule_path=args.capsule,
+            flatpak_app=flatpak_app,
+            dry_run=args.dry_run,
+            force=args.force,
+        )
+    except MigrationError as exc:
+        print(f"ogv: error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(
+            json.dumps(
+                report,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        if report.get("already_migrated"):
+            print(
+                f"Capsule {report['capsule_id']}: already migrated "
+                f"({report['contract_path']})"
+            )
+        elif report.get("dry_run"):
+            print(
+                f"[dry-run] Capsule {report['capsule_id']}: would "
+                f"replace {report['legacy_contract_path']} with "
+                f"{report['new_contract_path']}"
+            )
+        else:
+            print(
+                f"Capsule {report['capsule_id']}: migrated "
+                f"{report['legacy_contract_path']} -> "
+                f"{report['new_contract_path']} "
+                f"(legacy id: {report['legacy_contract_id']})"
+            )
+    return 0
+
+
 def _command_compose(args: argparse.Namespace) -> int:
     # Cross-backend validation: --state-root and --save-id only apply
     # to UMU; they name concepts (preserved state_archives, save
@@ -2895,6 +2946,49 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_umu_runtimes_parser.set_defaults(
         handler=_command_list_shared_umu_runtimes
+    )
+
+    migrate_bottles_parser = commands.add_parser(
+        "migrate-bottles-contract",
+        help=(
+            "Rewrite a legacy Bottles host-contract into the modern "
+            "neutral-contract shape (ogv-bottles-neutral-v1)."
+        ),
+    )
+    migrate_bottles_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Path to capsule.json.",
+    )
+    migrate_bottles_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would happen without touching any file.",
+    )
+    migrate_bottles_parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Overwrite the destination host-contract if it already "
+            "exists."
+        ),
+    )
+    migrate_bottles_parser.add_argument(
+        "--flatpak-app",
+        default=None,
+        help=(
+            "Flatpak application id to declare in the modern contract. "
+            "Defaults to bottles_adapter.DEFAULT_FLATPAK_APP."
+        ),
+    )
+    migrate_bottles_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable report.",
+    )
+    migrate_bottles_parser.set_defaults(
+        handler=_command_migrate_bottles_contract
     )
 
     composition_parser = commands.add_parser(
