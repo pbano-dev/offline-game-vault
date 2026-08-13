@@ -1832,6 +1832,21 @@ def _command_compose(args: argparse.Namespace) -> int:
                 "--save-id is only supported for --backend umu, "
                 f"not {args.backend}."
             )
+    # --no-state cross-arg validation: mutually exclusive with
+    # --state-backup (both describe how state is provisioned) and
+    # with --save-id (there is no save to select when state is
+    # skipped). Silencing either would obscure the operator's intent.
+    if args.no_state:
+        if args.state_backup is not None:
+            raise CompositionError(
+                "--no-state and --state-backup are mutually exclusive; "
+                "--no-state skips all state, --state-backup injects one."
+            )
+        if args.save_id is not None:
+            raise CompositionError(
+                "--no-state and --save-id are mutually exclusive; "
+                "--no-state skips all state, including selectable saves."
+            )
     common = {
         "collection_root": args.collection_root,
         "capsule_path": args.capsule,
@@ -1852,6 +1867,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             **common,
             destination=args.destination,
             state_backup=args.state_backup,
+            no_state=args.no_state,
             arguments=forwarded,
         )
     elif args.backend == "umu":
@@ -1863,6 +1879,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             state_backup=args.state_backup,
             state_root=args.state_root,
             save_id=args.save_id,
+            no_state=args.no_state,
             arguments=forwarded,
         )
     else:
@@ -1884,6 +1901,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             bottles_path=args.bottles_path,
             bottle_name=args.bottle_name,
             state_backup=args.state_backup,
+            no_state=args.no_state,
         )
 
     if args.json:
@@ -3058,6 +3076,18 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Verified persistent-state backup for the selected backend. "
             "Required when the capsule declares preservable state."
+        ),
+    )
+    composition_parser.add_argument(
+        "--no-state",
+        action="store_true",
+        help=(
+            "Materialize cold: skip the persistent-state requirement. "
+            "Under UMU with a preserved umu-native contract this also "
+            "skips 'always' policy state_archives. The materialization "
+            "may not launch cleanly if the capsule relied on that "
+            "state for initial configuration. Mutually exclusive with "
+            "--state-backup and --save-id."
         ),
     )
     composition_parser.add_argument(

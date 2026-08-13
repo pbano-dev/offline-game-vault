@@ -1630,6 +1630,7 @@ def materialize_umu_profile(
     state_backup: Path | None = None,
     require_state_backup: bool = False,
     state_capsule_path: Path | None = None,
+    no_state: bool = False,
 ) -> UmuMaterializationResult:
     """Verify, assemble, and atomically publish one UMU materialization."""
 
@@ -1670,8 +1671,8 @@ def materialize_umu_profile(
     try:
         state_selection = prepare_composition_state(
             capsule_path=state_capsule_path,
-            state_backup=state_backup,
-            require_declared_state=require_state_backup,
+            state_backup=None if no_state else state_backup,
+            require_declared_state=require_state_backup and not no_state,
         )
     except CompositionStateError as exc:
         raise UmuAdapterError(str(exc)) from exc
@@ -1754,11 +1755,17 @@ def materialize_umu_profile(
             "umu.paths.prefix",
         )
 
-    state_archives, selected_save = _state_archive(
-        contract=contract,
-        state_root=state_root,
-        save_id=save_id,
-    )
+    if no_state:
+        # Cold materialization: skip both `always` and `selectable`
+        # policy archives. The caller (compose_umu) has already emitted
+        # the informative warning listing the skipped ids.
+        state_archives, selected_save = [], None
+    else:
+        state_archives, selected_save = _state_archive(
+            contract=contract,
+            state_root=state_root,
+            save_id=save_id,
+        )
 
     if destination.exists() or destination.is_symlink():
         try:

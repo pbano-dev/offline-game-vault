@@ -1,6 +1,36 @@
 # Changelog
 
-## 0.18.0 — 2026-08-13
+## 0.19.0 — 2026-08-14
+
+### Removed
+
+- Retired the composition-layer runtime bridge
+  ``_neutral_fields_from_playable`` from ``composition.py``. After the
+  0.18.0 ``migrate-bottles-contract`` migrated the three known legacy
+  capsules (Dark Souls Remastered, Dark Souls III, Sekiro) to real
+  ``ogv-bottles-neutral-v1`` contracts, the bridge became dead code in
+  the real flow. The synthesis logic moves into
+  ``capsule_migrator.py`` as a private function so the migrator
+  remains usable if a further legacy capsule ever surfaces.
+
+- ``_SOURCE_PRIORITIES["bottles"]`` no longer lists ``playable-wine``.
+  Bottles composition against a playable-wine source now fails early
+  in ``_select_source_profile`` with an actionable message pointing at
+  ``ogv migrate-bottles-contract``. Direct-Wine and UMU keep
+  ``playable-wine`` as a legitimate source (unchanged).
+
+### Added
+
+- New ``--no-state`` flag on ``ogv compose``. Materializes the
+  destination cold: no state backup is required, no state backup is
+  injected, and under UMU with a preserved umu-native contract even
+  the ``always`` policy ``state_archives`` are skipped. When those
+  ``always`` archives exist, ``compose`` writes an informative warning
+  to stderr listing the skipped ids before materialization proceeds.
+  The receipt records ``state_provisioned: false`` and, for
+  umu-native, ``skipped_state_archives: [<ids>]`` so post-facto audit
+  is self-explanatory. Mutually exclusive with ``--state-backup`` and
+  with ``--save-id``; the CLI rejects the combination up front.## 0.18.0 — 2026-08-13
 
 ### Added
 

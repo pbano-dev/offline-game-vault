@@ -763,6 +763,7 @@ def materialize_playable_profile(
     destination: Path,
     state_backup: Path | None = None,
     state_capsule_path: Path | None = None,
+    no_state: bool = False,
 ) -> PlayableMaterializationResult:
     """Build, restore, verify, and atomically publish a playable profile."""
 
@@ -808,7 +809,13 @@ def materialize_playable_profile(
     state_declarations = _state_declarations(state_capsule)
     state_verification = None
     if state_declarations:
-        if state_backup is None:
+        if no_state:
+            # Cold materialization: do not require or verify a state
+            # backup. The caller (compose_wine) has passed None for
+            # state_backup, and the CLI has already rejected the
+            # combination of --no-state with --state-backup.
+            state_verification = None
+        elif state_backup is None:
             raise PlayableError(
                 "This capsule declares persistent state; --state-backup "
                 "is required."

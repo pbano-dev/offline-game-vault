@@ -3,11 +3,13 @@
 Historical capsules (Dark Souls Remastered, Dark Souls III, Sekiro)
 describe their Bottles profile via a host-contract of shape
 ``{schema, contract_id, platform, architecture, capabilities, ...}``
-that predates the modern neutral contract model. The composition
-layer has a bridge (``_neutral_fields_from_playable``) that
-synthesises the neutral fields at compose time from the sibling
-playable-wine profile. This module persists that synthesis as a
-real file so the bridge can be retired.
+that predates the modern neutral contract model. This module owns
+the synthesis (``_neutral_fields_from_playable`` below) that derives
+the neutral fields from the sibling playable-wine profile and
+persists them as a real ``host-contracts/linux-bottles-neutral.json``
+file. The composition layer no longer carries a runtime bridge for
+this shape — legacy capsules must go through this migration before
+they can be composed as Bottles derivatives.
 
 Migration is destructive on the legacy side (the old
 ``linux-bottles.json`` is deleted) and additive on the modern side
@@ -21,16 +23,102 @@ inside the new contract carrying ``legacy_contract_id``,
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 import json
+import re
 
 from . import __version__
-from .composition import _neutral_fields_from_playable, CompositionError
+from .composition import (
+    CompositionError,
+    _safe_relative,
+    _strip_prefix_root,
+)
 
 
 MODERN_CONTRACT_NAME = "ogv-bottles-neutral-v1"
 NEW_CONTRACT_RELATIVE = "host-contracts/linux-bottles-neutral.json"
+
+
+def _neutral_fields_from_playable(profile: dict[str, Any]) -> dict[str, str]:
+    """Derive neutral-contract fields from a historical playable Wine profile.
+
+    Legacy capsules describe a full Bottles archive whose single top-level
+    directory already *is* the Wine prefix, with the game installed inside it.
+    The modern neutral contract describes the same material declaratively,
+    so the mapping is total and requires no new evidence: profiles are
+    recipes, and a recipe that Direct-Wine can already read maps cleanly
+    to a Bottles-consumable neutral shape (ADR 0015, ADR 0016).
+
+    Previously exported from ``composition`` as a runtime bridge; retired
+    from there in 0.19.0 once the three known legacy capsules (DSR, DS3,
+    Sekiro) had been migrated. Kept here so this migrator remains usable
+    if a fourth legacy capsule ever surfaces.
+    """
+    playable = profile.get("playable")
+    launch = profile.get("launch")
+    if not isinstance(playable, dict) or not isinstance(launch, dict):
+        raise CompositionError(
+            "The playable Wine source profile has no launch or playable block."
+        )
+
+    paths = playable.get("paths")
+    if not isinstance(paths, dict):
+        raise CompositionError("The playable Wine profile declares no paths.")
+    prefix = paths.get("prefix")
+    if not isinstance(prefix, str) or not prefix:
+        raise CompositionError("The playable Wine profile declares no prefix.")
+
+    layout = playable.get("layout")
+    if not isinstance(layout, list):
+        raise CompositionError("The playable Wine profile declares no layout.")
+    prefix_entries = [
+        item
+        for item in layout
+        if isinstance(item, dict) and item.get("destination") == prefix
+    ]
+    if len(prefix_entries) != 1:
+        raise CompositionError(
+            "The playable Wine layout has no unique prefix object."
+        )
+    entry = prefix_entries[0]
+    source_object = entry.get("object")
+    archive_root = entry.get("source")
+    if not isinstance(source_object, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._-]*", source_object
+    ):
+        raise CompositionError(
+            "The playable prefix object is not a portable identifier."
+        )
+    neutral_root = _safe_relative(archive_root, "playable.layout[].source")
+
+    entrypoint = _strip_prefix_root(
+        launch.get("entrypoint"), prefix, "launch.entrypoint"
+    )
+    if len(entrypoint.parts) < 2:
+        raise CompositionError(
+            "launch.entrypoint declares no game directory inside the prefix."
+        )
+    game_destination = PurePosixPath(*entrypoint.parts[:-1])
+    working_directory = (
+        _strip_prefix_root(
+            launch.get("working_directory"),
+            prefix,
+            "launch.working_directory",
+        )
+        if launch.get("working_directory") is not None
+        else game_destination
+    )
+
+    return {
+        "source_object": source_object,
+        "neutral_root": neutral_root.as_posix(),
+        "prefix_source": neutral_root.as_posix(),
+        "game_source": (neutral_root / game_destination).as_posix(),
+        "game_destination_in_prefix": game_destination.as_posix(),
+        "entrypoint_relative_to_game": entrypoint.parts[-1],
+        "working_directory_in_prefix": working_directory.as_posix(),
+    }
 
 
 class MigrationError(Exception):
