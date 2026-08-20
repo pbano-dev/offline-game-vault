@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.19.1 — 2026-08-20
+### Fixed
+
+- Automatic source selection for Direct-Wine and synthesized UMU composition
+  now preflights each synthesized candidate with the exact preserved runner
+  using the authoritative ``build_derived_capsule`` contract. If a
+  higher-priority neutral source is structurally unable to derive, Auto
+  continues to the next priority instead of failing later after selection.
+- Explicit ``--source-profile`` remains authoritative: an explicitly selected
+  incompatible source still surfaces its own error and is never silently
+  replaced by another profile.
+- First-class ``umu-native`` profiles are not routed through Wine synthesis and
+  retain their existing priority and materialization path.
+
 ## 0.19.0 — 2026-08-14
 
 ### Removed

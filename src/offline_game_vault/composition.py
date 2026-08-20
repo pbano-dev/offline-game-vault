@@ -448,6 +448,7 @@ def _select_source_profile(
     *,
     backend: str,
     profile_id: str | None,
+    runner: RunnerRecord | None = None,
 ) -> str:
     priorities = _SOURCE_PRIORITIES.get(backend)
     if priorities is None:
@@ -477,6 +478,50 @@ def _select_source_profile(
             f"Linux source profile{selected} cannot provide the material "
             f"required by {backend}."
         )
+
+    if profile_id is None and runner is not None:
+        auto_candidates = candidates
+        candidates = []
+        derivation_failures: list[tuple[str, str]] = []
+        for priority in sorted({item[0] for item in auto_candidates}):
+            viable: list[tuple[int, str, str]] = []
+            for candidate in auto_candidates:
+                if candidate[0] != priority:
+                    continue
+                _priority, identifier, kind = candidate
+                if (
+                    kind not in _NEUTRAL_CONTRACTS
+                    and kind != "playable-wine"
+                ):
+                    viable.append(candidate)
+                    continue
+                try:
+                    build_derived_capsule(
+                        capsule_path,
+                        identifier,
+                        runner,
+                    )
+                except RunnerOverrideError as exc:
+                    derivation_failures.append(
+                        (identifier, str(exc))
+                    )
+                else:
+                    viable.append(candidate)
+            if viable:
+                candidates = viable
+                break
+
+        if not candidates:
+            detail = "; ".join(
+                f"{identifier}: {message}"
+                for identifier, message in derivation_failures
+            )
+            raise CompositionError(
+                "No automatically selected Linux source profile is "
+                f"derivable for {backend} with runner "
+                f"{runner.runner_id!r}"
+                + (f": {detail}" if detail else ".")
+            )
 
     best_priority = min(item[0] for item in candidates)
     best = [item for item in candidates if item[0] == best_priority]
@@ -603,6 +648,7 @@ def compose_wine(
         capsule_path,
         backend="direct-wine",
         profile_id=source_profile_id,
+        runner=runner,
     )
     try:
         derived = build_derived_capsule(capsule_path, source_id, runner)
@@ -2117,6 +2163,7 @@ def compose_umu(
         capsule_path,
         backend="umu",
         profile_id=source_profile_id,
+        runner=runner,
     )
 
     # Determine source kind before touching shared runtime resolution.
