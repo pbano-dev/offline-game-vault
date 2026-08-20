@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.19.4 — 2026-08-20
+
+- Generic UMU composition now preserves the Direct-Wine source
+  `playable.prefix_operations` that define required writable prefix topology.
+  Safe `mkdir` and relative `symlink` operations are rendered into the
+  generated offline launcher and applied idempotently before UMU/Proton starts.
+- This fixes generic Proton composition for preserved prefixes whose canonical
+  archive intentionally omits derived links such as `dosdevices/c:` and for
+  neutral objects whose game payload is linked into a prefix template. The
+  behavior is game-independent; native UMU recipes, including the explicit
+  DMC5-only route, are unchanged.
+
 ## 0.19.3 — 2026-08-20
 
 - Generic UMU composition can now reuse a complete Steam Runtime preserved

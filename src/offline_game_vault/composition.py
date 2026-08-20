@@ -2008,6 +2008,165 @@ def _shell_array(values: list[str]) -> str:
     return " ".join(shlex.quote(value) for value in values)
 
 
+def _generic_umu_prefix_setup(
+    playable: dict[str, Any],
+    prefix: str,
+) -> str:
+    """Render safe, idempotent Direct-Wine prefix operations for UMU.
+
+    Generic UMU composition is derived from a Direct-Wine-capable source.
+    Its layout alone is not sufficient: ``playable.prefix_operations`` may
+    create required Wine-prefix topology (for example ``dosdevices/c:``) or
+    link a neutral game payload into the prefix. Those operations are part
+    of the source material contract and must survive backend adaptation.
+    """
+
+    raw_operations = playable.get("prefix_operations", [])
+    if not isinstance(raw_operations, list):
+        raise CompositionError(
+            "playable.prefix_operations must be an array."
+        )
+
+    prefix_path = PurePosixPath(prefix)
+    lines: list[str] = []
+
+    def normalized_target(
+        link_path: PurePosixPath,
+        raw_target: Any,
+        index: int,
+    ) -> str:
+        if (
+            not isinstance(raw_target, str)
+            or not raw_target
+            or "\x00" in raw_target
+            or "\\" in raw_target
+        ):
+            raise CompositionError(
+                f"playable.prefix_operations[{index}].target is invalid."
+            )
+        target = PurePosixPath(raw_target)
+        if target.is_absolute():
+            raise CompositionError(
+                f"playable.prefix_operations[{index}].target "
+                "must be relative."
+            )
+
+        resolved_parts: list[str] = []
+        for part in (*link_path.parent.parts, *target.parts):
+            if part in {"", "."}:
+                continue
+            if part == "..":
+                if not resolved_parts:
+                    raise CompositionError(
+                        f"playable.prefix_operations[{index}].target "
+                        "escapes the materialization."
+                    )
+                resolved_parts.pop()
+                continue
+            resolved_parts.append(part)
+
+        if not resolved_parts:
+            raise CompositionError(
+                f"playable.prefix_operations[{index}].target "
+                "resolves to the materialization root."
+            )
+        return raw_target
+
+    for index, raw_operation in enumerate(raw_operations):
+        if not isinstance(raw_operation, dict):
+            raise CompositionError(
+                f"playable.prefix_operations[{index}] must be an object."
+            )
+
+        operation_type = raw_operation.get("type")
+        operation_path = _safe_relative(
+            raw_operation.get("path"),
+            f"playable.prefix_operations[{index}].path",
+        )
+        if (
+            operation_path == prefix_path
+            or not operation_path.is_relative_to(prefix_path)
+        ):
+            raise CompositionError(
+                f"playable.prefix_operations[{index}].path "
+                "must remain below the declared prefix."
+            )
+
+        relative = operation_path.relative_to(prefix_path).as_posix()
+        path_expression = f'"$PREFIX"/{shlex.quote(relative)}'
+
+        if operation_type == "mkdir":
+            lines.extend(
+                (
+                    f"OGV_PREFIX_OP_PATH={path_expression}",
+                    (
+                        'if [[ -L "$OGV_PREFIX_OP_PATH" '
+                        '|| ( -e "$OGV_PREFIX_OP_PATH" '
+                        '&& ! -d "$OGV_PREFIX_OP_PATH" ) ]]; then'
+                    ),
+                    (
+                        "    printf 'UMU composition: prefix mkdir "
+                        "collides with non-directory: %s\\n' "
+                        '"$OGV_PREFIX_OP_PATH" >&2'
+                    ),
+                    "    exit 1",
+                    "fi",
+                    'mkdir -p -- "$OGV_PREFIX_OP_PATH"',
+                    "",
+                )
+            )
+            continue
+
+        if operation_type == "symlink":
+            target = normalized_target(
+                operation_path,
+                raw_operation.get("target"),
+                index,
+            )
+            target_literal = shlex.quote(target)
+            lines.extend(
+                (
+                    f"OGV_PREFIX_OP_PATH={path_expression}",
+                    f"OGV_PREFIX_OP_TARGET={target_literal}",
+                    'if [[ -L "$OGV_PREFIX_OP_PATH" ]]; then',
+                    (
+                        '    if [[ "$(readlink -- "$OGV_PREFIX_OP_PATH")" '
+                        '!= "$OGV_PREFIX_OP_TARGET" ]]; then'
+                    ),
+                    (
+                        "        printf 'UMU composition: prefix symlink "
+                        "has unexpected target: %s\\n' "
+                        '"$OGV_PREFIX_OP_PATH" >&2'
+                    ),
+                    "        exit 1",
+                    "    fi",
+                    'elif [[ -e "$OGV_PREFIX_OP_PATH" ]]; then',
+                    (
+                        "    printf 'UMU composition: prefix symlink "
+                        "collides with existing path: %s\\n' "
+                        '"$OGV_PREFIX_OP_PATH" >&2'
+                    ),
+                    "    exit 1",
+                    "else",
+                    '    mkdir -p -- "$(dirname -- "$OGV_PREFIX_OP_PATH")"',
+                    (
+                        '    ln -s -- "$OGV_PREFIX_OP_TARGET" '
+                        '"$OGV_PREFIX_OP_PATH"'
+                    ),
+                    "fi",
+                    "",
+                )
+            )
+            continue
+
+        raise CompositionError(
+            f"playable.prefix_operations[{index}].type "
+            f"{operation_type!r} is unsupported by generic UMU composition."
+        )
+
+    return "\n".join(lines)
+
+
 def _generic_umu_launcher(
     *,
     capsule: dict[str, Any],
@@ -2037,6 +2196,10 @@ def _generic_umu_launcher(
         paths.get("prefix"),
         "playable.paths.prefix",
     ).as_posix()
+    prefix_setup = _generic_umu_prefix_setup(
+        playable,
+        prefix,
+    )
 
     entrypoint = _safe_relative(
         launch.get("entrypoint"),
@@ -2151,6 +2314,7 @@ for required in "$PREFIX" "$PROTON" "$XDG_DATA" "$WORKDIR"; do
     }}
 done
 
+{prefix_setup}
 [[ -f "$EXE" ]] || {{
     printf 'UMU composition: missing game entrypoint: %s\n' "$EXE" >&2
     exit 1
