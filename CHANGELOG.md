@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.19.2 — 2026-08-20
+### Fixed
+
+- UMU-native source profiles now participate in exact runner selection.
+  A native profile is eligible only when the requested preserved runner is
+  proven by immutable identity. A directly mapped ``engine/proton/...``
+  object is authoritative and must have the same object digest. Only when
+  no direct Proton mapping exists may a Proton tree embedded in a composite
+  ``engine`` object bind by exact normalized file-manifest identity.
+- Automatic UMU source selection now skips a native profile bound to another
+  runner and continues to the next structurally derivable neutral/playable
+  source. This prevents a selected Proton runner from being silently ignored
+  by a higher-priority native recipe.
+- Explicit selection of a mismatched UMU-native source now fails clearly
+  instead of launching with the runner embedded by that native recipe.
+
 ## 0.19.1 — 2026-08-20
 ### Fixed
 

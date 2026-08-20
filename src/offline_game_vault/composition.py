@@ -457,6 +457,19 @@ def _select_source_profile(
     capsule = _load_json(capsule_path, "capsule.json")
     candidates: list[tuple[int, str, str]] = []
     known_ids: set[str] = set()
+    native_runner_mismatches: list[
+        tuple[str, tuple[str, ...]]
+    ] = []
+    objects = capsule.get("objects")
+    object_records = (
+        objects if isinstance(objects, list) else []
+    )
+    declarations = {
+        item.get("id"): item
+        for item in object_records
+        if isinstance(item, dict)
+        and isinstance(item.get("id"), str)
+    }
     for profile in _linux_profiles(capsule):
         identifier = profile.get("id")
         if not isinstance(identifier, str) or not identifier:
@@ -466,12 +479,243 @@ def _select_source_profile(
             continue
         kind = _source_kind(capsule_path, profile)
         if kind in priorities:
+            if (
+                backend == "umu"
+                and kind == "umu-native"
+                and runner is not None
+            ):
+                umu = profile.get("umu")
+                layout = (
+                    umu.get("layout")
+                    if isinstance(umu, dict)
+                    else None
+                )
+                bound_objects: list[str] = []
+                if isinstance(layout, list):
+                    for layout_item in layout:
+                        if not isinstance(layout_item, dict):
+                            continue
+                        destination = layout_item.get(
+                            "destination"
+                        )
+                        object_id = layout_item.get("object")
+                        if (
+                            not isinstance(destination, str)
+                            or not isinstance(object_id, str)
+                        ):
+                            continue
+                        parts = PurePosixPath(
+                            destination
+                        ).parts
+                        if (
+                            len(parts) >= 3
+                            and parts[:2]
+                            == ("engine", "proton")
+                        ):
+                            bound_objects.append(object_id)
+                native_runner_ids = tuple(
+                    sorted(set(bound_objects))
+                )
+                native_runner_digests = tuple(
+                    sorted(
+                        {
+                            str(declaration["digest"])
+                            for object_id in native_runner_ids
+                            for declaration in (
+                                declarations.get(object_id),
+                            )
+                            if isinstance(declaration, dict)
+                            and isinstance(
+                                declaration.get("digest"),
+                                str,
+                            )
+                        }
+                    )
+                )
+
+                direct_match = (
+                    len(native_runner_ids) == 1
+                    and native_runner_digests
+                    == (runner.digest,)
+                )
+
+                embedded_match = False
+                embedded_bindings: list[str] = []
+                if (
+                    not direct_match
+                    and not native_runner_ids
+                    and isinstance(layout, list)
+                ):
+                    collection_root = capsule_path.parents[2]
+
+                    def manifest_entries(
+                        digest: str,
+                    ) -> tuple[tuple[str, int, str], ...]:
+                        if not digest.startswith("sha256:"):
+                            return ()
+                        hexdigest = digest.removeprefix("sha256:")
+                        manifest = (
+                            collection_root
+                            / "01_IMMUTABLE_VAULT"
+                            / "manifests"
+                            / "sha256"
+                            / hexdigest[:2]
+                            / hexdigest[2:4]
+                            / hexdigest
+                        )
+                        if not manifest.is_file():
+                            return ()
+                        entries: list[tuple[str, int, str]] = []
+                        for raw in manifest.read_text(
+                            encoding="utf-8"
+                        ).splitlines():
+                            parts = raw.strip().split(None, 2)
+                            if len(parts) != 3:
+                                continue
+                            file_digest, size_text, relative = parts
+                            file_digest = file_digest.removeprefix(
+                                "sha256:"
+                            )
+                            if (
+                                len(file_digest) != 64
+                                or any(
+                                    char not in "0123456789abcdef"
+                                    for char in file_digest
+                                )
+                            ):
+                                continue
+                            try:
+                                size = int(size_text)
+                            except ValueError:
+                                continue
+                            entries.append(
+                                (
+                                    file_digest,
+                                    size,
+                                    PurePosixPath(relative).as_posix(),
+                                )
+                            )
+                        return tuple(sorted(entries))
+
+                    def strip_manifest_prefix(
+                        entries: tuple[
+                            tuple[str, int, str], ...
+                        ],
+                        prefix: str,
+                    ) -> tuple[tuple[str, int, str], ...]:
+                        normalized = (
+                            PurePosixPath(prefix).as_posix().rstrip("/")
+                            + "/"
+                        )
+                        stripped = [
+                            (
+                                digest,
+                                size,
+                                relative[len(normalized):],
+                            )
+                            for digest, size, relative in entries
+                            if relative.startswith(normalized)
+                            and relative != normalized
+                        ]
+                        return tuple(sorted(stripped))
+
+                    runner_entries = manifest_entries(runner.digest)
+                    normalized_runner_entries = (
+                        strip_manifest_prefix(
+                            runner_entries,
+                            runner.source_root,
+                        )
+                        or runner_entries
+                    )
+
+                    if normalized_runner_entries:
+                        for layout_item in layout:
+                            if not isinstance(layout_item, dict):
+                                continue
+                            destination = layout_item.get(
+                                "destination"
+                            )
+                            source = layout_item.get("source")
+                            object_id = layout_item.get("object")
+                            if (
+                                destination != "engine"
+                                or not isinstance(source, str)
+                                or not isinstance(object_id, str)
+                            ):
+                                continue
+                            declaration = declarations.get(object_id)
+                            if not isinstance(declaration, dict):
+                                continue
+                            object_digest = declaration.get("digest")
+                            if not isinstance(object_digest, str):
+                                continue
+                            object_entries = manifest_entries(
+                                object_digest
+                            )
+                            embedded_prefix = (
+                                PurePosixPath(source)
+                                / "proton"
+                                / runner.source_root
+                            ).as_posix()
+                            embedded_entries = strip_manifest_prefix(
+                                object_entries,
+                                embedded_prefix,
+                            )
+                            if (
+                                embedded_entries
+                                and embedded_entries
+                                == normalized_runner_entries
+                            ):
+                                embedded_match = True
+                                embedded_bindings.append(
+                                    f"{object_id}:{embedded_prefix}"
+                                )
+                                break
+
+                if not direct_match and not embedded_match:
+                    binding_details = (
+                        native_runner_ids
+                        + tuple(embedded_bindings)
+                    )
+                    native_runner_mismatches.append(
+                        (identifier, binding_details)
+                    )
+                    continue
             candidates.append((priorities[kind], identifier, kind))
 
     if profile_id is not None and profile_id not in known_ids:
         raise CompositionError(
             f"Source profile {profile_id!r} does not exist."
         )
+    if not candidates and native_runner_mismatches:
+        bindings = "; ".join(
+            (
+                f"{identifier}: "
+                + (
+                    ", ".join(runner_ids)
+                    if runner_ids
+                    else "<no unique runner binding>"
+                )
+            )
+            for identifier, runner_ids in native_runner_mismatches
+        )
+        requested = (
+            runner.runner_id
+            if runner is not None
+            else "<unspecified>"
+        )
+        if profile_id is not None:
+            raise CompositionError(
+                f"UMU-native source profile {profile_id!r} is not bound "
+                f"exclusively to requested runner {requested!r}; "
+                f"declared native Proton binding: {bindings}."
+            )
+        raise CompositionError(
+            "No Linux source profile can satisfy the requested UMU "
+            f"runner {requested!r}. UMU-native Proton bindings rejected by "
+            f"the exact-runner contract: {bindings}."
+        )
+
     if not candidates:
         selected = f" {profile_id!r}" if profile_id is not None else ""
         raise CompositionError(
