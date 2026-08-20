@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.19.3 — 2026-08-20
+
+- Generic UMU composition can now reuse a complete Steam Runtime preserved
+  inside a registered shared UMU stack. Candidate subtrees are discovered
+  from immutable object manifests and must pass the same structural archive
+  validation as first-class `shared-umu-runtime` objects.
+- Embedded runtime reuse is global and game-independent: a neutral game
+  source can use a newly selected preserved Proton whenever its required
+  Steam Runtime is already present in a shared stack, without duplicating
+  CAS bytes or adding a game-specific UMU recipe. Native UMU recipes remain
+  optional specialized routes; game-specific structural exceptions remain
+  explicit.
+
 ## 0.19.2 — 2026-08-20
 ### Fixed
 

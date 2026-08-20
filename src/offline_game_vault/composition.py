@@ -1733,6 +1733,7 @@ def _scan_shared_umu_runtimes(
         )
 
     runtime_records = []
+    seen_runtime_keys: set[tuple[str, str, str]] = set()
     for record in _registered_global_components(
         collection_root,
         role="shared-umu-runtime",
@@ -1748,7 +1749,129 @@ def _scan_shared_umu_runtimes(
             )
         except CompositionError:
             continue
+        family = runtime_data[0]
+        source = str(index_item["archive_root"])
+        key = (str(declaration["digest"]), source, family)
+        seen_runtime_keys.add(key)
         runtime_records.append((*record, runtime_data))
+
+    def embedded_runtime_families(
+        declaration: dict[str, Any],
+    ) -> tuple[str, ...]:
+        raw_digest = declaration.get("digest")
+        if (
+            not isinstance(raw_digest, str)
+            or not raw_digest.startswith("sha256:")
+        ):
+            return ()
+        hexdigest = raw_digest.removeprefix("sha256:")
+        if (
+            len(hexdigest) != 64
+            or any(
+                char not in "0123456789abcdef"
+                for char in hexdigest
+            )
+        ):
+            return ()
+        manifest = (
+            collection_root
+            / "01_IMMUTABLE_VAULT"
+            / "manifests"
+            / "sha256"
+            / hexdigest[:2]
+            / hexdigest[2:4]
+            / hexdigest
+        )
+        if not manifest.is_file():
+            return ()
+
+        prefixes = {
+            family: f"engine/xdg-data/umu/{family}/"
+            for family in _UMU_PLATFORM_PREFIX_BY_FAMILY
+        }
+        found: set[str] = set()
+        try:
+            lines = manifest.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
+            return ()
+
+        for raw in lines:
+            parts = raw.strip().split(None, 2)
+            if len(parts) != 3:
+                continue
+            relative = PurePosixPath(parts[2]).as_posix()
+            for family, prefix in prefixes.items():
+                if relative.startswith(prefix):
+                    found.add(family)
+        return tuple(sorted(found))
+
+    # A registered shared UMU stack is itself an immutable reusable
+    # component. If it contains a complete Steam Runtime subtree, expose
+    # that subtree to generic composition instead of requiring a second,
+    # byte-duplicated CAS object. Candidate discovery uses the immutable
+    # object manifest; the existing archive validator remains authoritative
+    # for completeness and topology.
+    for (
+        _backend_index,
+        backend_declaration,
+        backend_physical,
+        _backend_command,
+    ) in backend_records:
+        for family in embedded_runtime_families(backend_declaration):
+            source = f"engine/xdg-data/umu/{family}"
+            key = (
+                str(backend_declaration["digest"]),
+                source,
+                family,
+            )
+            if key in seen_runtime_keys:
+                continue
+
+            embedded_index: dict[str, Any] = {
+                "archive_root": source,
+                "runtime_family": family,
+                "_embedded_runtime": True,
+            }
+            embedded_declaration = deepcopy(backend_declaration)
+            embedded_declaration["id"] = (
+                f"{backend_declaration['id']}-embedded-{family}"
+            )
+            raw_roles = embedded_declaration.get("roles")
+            roles = (
+                [
+                    role
+                    for role in raw_roles
+                    if isinstance(role, str)
+                ]
+                if isinstance(raw_roles, list)
+                else []
+            )
+            if "runtime" not in roles:
+                roles.append("runtime")
+            embedded_declaration["roles"] = sorted(set(roles))
+            embedded_declaration["description"] = (
+                f"Validated {family} subtree reused from preserved shared "
+                f"UMU stack {backend_declaration['id']!r}."
+            )
+
+            try:
+                runtime_data = _validate_global_steam_runtime(
+                    embedded_index,
+                    embedded_declaration,
+                    backend_physical,
+                )
+            except CompositionError:
+                continue
+
+            seen_runtime_keys.add(key)
+            runtime_records.append(
+                (
+                    embedded_index,
+                    embedded_declaration,
+                    backend_physical,
+                    runtime_data,
+                )
+            )
 
     results: list[SharedUmuRuntime] = []
     archive_policy = {
@@ -1787,8 +1910,16 @@ def _scan_shared_umu_runtimes(
             runtime_digest = str(
                 runtime_declaration["digest"]
             ).removeprefix("sha256:")
+            runtime_source = str(runtime_index["archive_root"])
+            composition_identity = f"{backend_digest}:{runtime_digest}"
+            if runtime_index.get("_embedded_runtime") is True:
+                # The same immutable stack may contain more than one
+                # independently reusable subtree. Include the source path
+                # so component-set identity describes the selected bytes,
+                # while preserving legacy ids for first-class runtimes.
+                composition_identity += f":{runtime_source}"
             composition_digest = hashlib.sha256(
-                f"{backend_digest}:{runtime_digest}".encode("utf-8")
+                composition_identity.encode("utf-8")
             ).hexdigest()
 
             results.append(
@@ -1815,9 +1946,7 @@ def _scan_shared_umu_runtimes(
                         backend_entrypoint_arguments
                     ),
                     backend_pythonpath=backend_pythonpath,
-                    runtime_source=str(
-                        runtime_index["archive_root"]
-                    ),
+                    runtime_source=runtime_source,
                     runtime_destination=(
                         f"engine/xdg-data/umu/{family}"
                     ),
