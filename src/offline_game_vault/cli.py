@@ -1832,6 +1832,27 @@ def _command_compose(args: argparse.Namespace) -> int:
                 "--save-id is only supported for --backend umu, "
                 f"not {args.backend}."
             )
+    # Fresh-start is user intent: no selectable/restored save, while
+    # retaining backend-required initial configuration. It is distinct from
+    # the stronger --no-state operator control.
+    #
+    # Use getattr for compatibility with callers/tests that construct an
+    # argparse.Namespace directly instead of going through build_parser().
+    fresh_start = bool(getattr(args, "fresh_start", False))
+    if fresh_start:
+        if args.no_state:
+            raise CompositionError(
+                "--fresh-start and --no-state are mutually exclusive."
+            )
+        if args.state_backup is not None:
+            raise CompositionError(
+                "--fresh-start and --state-backup are mutually exclusive."
+            )
+        if args.save_id is not None:
+            raise CompositionError(
+                "--fresh-start and --save-id are mutually exclusive."
+            )
+
     # --no-state cross-arg validation: mutually exclusive with
     # --state-backup (both describe how state is provisioned) and
     # with --save-id (there is no save to select when state is
@@ -1867,6 +1888,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             **common,
             destination=args.destination,
             state_backup=args.state_backup,
+            fresh_start=fresh_start,
             no_state=args.no_state,
             arguments=forwarded,
         )
@@ -1879,6 +1901,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             state_backup=args.state_backup,
             state_root=args.state_root,
             save_id=args.save_id,
+            fresh_start=fresh_start,
             no_state=args.no_state,
             arguments=forwarded,
         )
@@ -1901,6 +1924,7 @@ def _command_compose(args: argparse.Namespace) -> int:
             bottles_path=args.bottles_path,
             bottle_name=args.bottle_name,
             state_backup=args.state_backup,
+            fresh_start=fresh_start,
             no_state=args.no_state,
         )
 
@@ -3076,6 +3100,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Verified persistent-state backup for the selected backend. "
             "Required when the capsule declares preservable state."
+        ),
+    )
+    composition_parser.add_argument(
+        "--fresh-start",
+        action="store_true",
+        help=(
+            "Start without restoring a selectable or generic saved-game "
+            "state while preserving backend-required initial configuration. "
+            "For preserved UMU-native contracts, policy='always' archives "
+            "are still applied and no selectable save is chosen. Mutually "
+            "exclusive with --no-state, --state-backup and --save-id."
         ),
     )
     composition_parser.add_argument(

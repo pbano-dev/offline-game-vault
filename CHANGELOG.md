@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.19.5 — 2026-08-20
+
+- Added backend-neutral `compose --fresh-start` intent: begin without
+  restoring a selectable or generic saved-game state while retaining
+  backend-required initial configuration.
+- Preserved UMU-native contracts resolve fresh-start inside the core:
+  `policy=always` state archives are still applied while no `selectable`
+  archive is chosen. This keeps backend policy out of the GUI.
+- `--no-state` remains the stronger operator control and still skips all
+  state, including UMU `always` archives. `--fresh-start` is mutually
+  exclusive with `--no-state`, `--state-backup`, and `--save-id`.
+
 ## 0.19.4 — 2026-08-20
 
 - Generic UMU composition now preserves the Direct-Wine source

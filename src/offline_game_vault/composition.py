@@ -873,6 +873,44 @@ def _rollback_destination(destination: Path) -> None:
         )
 
 
+def _validate_fresh_start_intent(
+    *,
+    fresh_start: bool,
+    no_state: bool,
+    state_backup: Path | None,
+    save_id: str | None = None,
+) -> None:
+    # User-level fresh-start must not be conflated with the stronger
+    # low-level no-state operator control.
+    if not fresh_start:
+        return
+    if no_state:
+        raise CompositionError(
+            "fresh_start and no_state are mutually exclusive: fresh_start "
+            "preserves backend-required initial configuration, while "
+            "no_state skips all state."
+        )
+    if state_backup is not None:
+        raise CompositionError(
+            "fresh_start and state_backup are mutually exclusive."
+        )
+    if save_id is not None:
+        raise CompositionError(
+            "fresh_start and save_id are mutually exclusive."
+        )
+
+
+def _effective_materializer_no_state(
+    *,
+    source_kind: str,
+    fresh_start: bool,
+    no_state: bool,
+) -> bool:
+    # no_state always skips state. Fresh-start skips restorable generic state,
+    # but preserved UMU-native contracts must keep policy=always archives.
+    return no_state or (fresh_start and source_kind != "umu-native")
+
+
 def compose_wine(
     *,
     collection_root: Path,
@@ -881,10 +919,21 @@ def compose_wine(
     destination: Path,
     source_profile_id: str | None = None,
     state_backup: Path | None = None,
+    fresh_start: bool = False,
     no_state: bool = False,
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
+    _validate_fresh_start_intent(
+        fresh_start=fresh_start,
+        no_state=no_state,
+        state_backup=state_backup,
+    )
+    effective_no_state = _effective_materializer_no_state(
+        source_kind="generic",
+        fresh_start=fresh_start,
+        no_state=no_state,
+    )
     collection_root = collection_root.expanduser().resolve(strict=True)
     vault_root = collection_root / "01_IMMUTABLE_VAULT"
     runner = _select_runner(collection_root, runner_id, "direct-wine")
@@ -921,17 +970,17 @@ def compose_wine(
             )
         except ManifestTravelError as exc:
             raise CompositionError(str(exc)) from exc
-        # `no_state` retires the require_state_backup pre-flight for this
-        # composition; state_backup is dropped (mutual exclusion is
-        # enforced upstream at the CLI layer).
+        # For generic Direct-Wine materialization, fresh-start and
+        # no-state both omit restorable state. The semantic distinction is
+        # retained at the composition boundary for backends such as UMU-native.
         result = materialize_playable_profile(
             capsule_path=operational_capsule,
             profile_id=profile_id,
             vault_root=vault_root,
             destination=destination,
-            state_backup=None if no_state else state_backup,
+            state_backup=None if effective_no_state else state_backup,
             state_capsule_path=capsule_path,
-            no_state=no_state,
+            no_state=effective_no_state,
         )
         try:
             copied_manifests = copy_manifests_to_materialization(
@@ -981,7 +1030,8 @@ def compose_wine(
         play_complete=play_complete,
         backend_result={
             "materialization": asdict(result),
-            "state_provisioned": not no_state,
+            "state_provisioned": not effective_no_state,
+            "fresh_start": fresh_start,
             "play": play_result,
         },
     )
@@ -1154,9 +1204,20 @@ def compose_bottles(
     bottle_name: str,
     source_profile_id: str | None = None,
     state_backup: Path | None = None,
+    fresh_start: bool = False,
     no_state: bool = False,
     play: bool = False,
 ) -> CompositionResult:
+    _validate_fresh_start_intent(
+        fresh_start=fresh_start,
+        no_state=no_state,
+        state_backup=state_backup,
+    )
+    effective_no_state = _effective_materializer_no_state(
+        source_kind="generic",
+        fresh_start=fresh_start,
+        no_state=no_state,
+    )
     collection_root = collection_root.expanduser().resolve(strict=True)
     vault_root = collection_root / "01_IMMUTABLE_VAULT"
     runner = _select_runner(collection_root, runner_id, "bottles")
@@ -1267,11 +1328,12 @@ def compose_bottles(
                 destination=destination,
                 bottles_path=bottles_path,
                 bottle_name=bottle_name,
-                # --no-state drops the state_backup requirement AND
-                # silences the pre-flight; the flag is mutually exclusive
-                # with --state-backup upstream at the CLI layer.
-                state_backup=None if no_state else state_backup,
-                require_state_backup=not no_state,
+                # Generic Bottles fresh-start omits restorable state,
+                # while retaining the distinct stronger no-state control.
+                state_backup=(
+                    None if effective_no_state else state_backup
+                ),
+                require_state_backup=not effective_no_state,
                 state_capsule_path=capsule_path,
             )
             try:
@@ -1343,7 +1405,8 @@ def compose_bottles(
         backend_result={
             "deployment": asdict(deployment),
             "runner_installed": runner_created,
-            "state_provisioned": not no_state,
+            "state_provisioned": not effective_no_state,
+            "fresh_start": fresh_start,
             "play": play_result,
         },
     )
@@ -2687,10 +2750,17 @@ def compose_umu(
     state_backup: Path | None = None,
     state_root: Path | None = None,
     save_id: str | None = None,
+    fresh_start: bool = False,
     no_state: bool = False,
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
+    _validate_fresh_start_intent(
+        fresh_start=fresh_start,
+        no_state=no_state,
+        state_backup=state_backup,
+        save_id=save_id,
+    )
     collection_root = collection_root.expanduser().resolve(strict=True)
     vault_root = collection_root / "01_IMMUTABLE_VAULT"
     # Runner selection is a validation (must exist and declare umu
@@ -2722,6 +2792,11 @@ def compose_umu(
             "selection and lookup."
         ) from exc
     source_kind = _source_kind(capsule_path, source_profile_doc)
+    effective_no_state = _effective_materializer_no_state(
+        source_kind=source_kind or "",
+        fresh_start=fresh_start,
+        no_state=no_state,
+    )
 
     destination = destination.expanduser()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -2784,7 +2859,7 @@ def compose_umu(
                 runtime=runtime,
                 output=Path(temporary) / "capsule",
             )
-            require_state_backup = not no_state
+            require_state_backup = not effective_no_state
             # `skipped_state_archives` is meaningful only for umu-native
             # (synthesized UMU has no preserved state_archives). Keep it
             # defined for the shared backend_result assembly below.
@@ -2801,12 +2876,14 @@ def compose_umu(
             profile_id=profile_id,
             vault_root=vault_root,
             destination=destination,
-            state_backup=None if no_state else state_backup,
+            state_backup=(
+                None if effective_no_state or fresh_start else state_backup
+            ),
             state_root=state_root,
             save_id=save_id,
             require_state_backup=require_state_backup,
             state_capsule_path=capsule_path,
-            no_state=no_state,
+            no_state=effective_no_state,
         )
         try:
             copied_manifests = copy_manifests_to_materialization(
@@ -2869,7 +2946,8 @@ def compose_umu(
                 runtime.backend_entrypoint if runtime else None
             ),
             "source_kind": source_kind,
-            "state_provisioned": not no_state,
+            "state_provisioned": not effective_no_state,
+            "fresh_start": fresh_start,
             "skipped_state_archives": skipped_state_archives,
             "play": play_result,
         },
