@@ -918,11 +918,68 @@
       "type": "object"
     },
     "objects": {
-      "description": "First-class objects only: one canonical game object plus shared runner/runtime archives. Internal critical files belong in embedded_artifacts.",
+      "description": "First-class immutable objects: the canonical game object, shared runner/runtime archives, and optional selectable content objects. Internal critical files belong in embedded_artifacts.",
       "items": {
         "$ref": "#/$defs/object"
       },
       "minItems": 1,
+      "type": "array"
+    },
+    "optional_content": {
+      "description": "Backend-neutral selectable immutable content. Objects are inert unless explicitly selected at composition time.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string"
+          },
+          "object": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "type": "string"
+          },
+          "placement": {
+            "additionalProperties": false,
+            "properties": {
+              "destination": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "game-overlay",
+                  "sidecar"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "destination"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "classification",
+          "source",
+          "placement"
+        ],
+        "type": "object"
+      },
       "type": "array"
     },
     "persistent_state": {

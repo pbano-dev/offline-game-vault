@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.19.7 — 2026-08-21
+
+- Added a backend-neutral `optional_content` capsule contract for immutable,
+  user-selectable game content.
+- Added `ogv list-optional-content` and repeatable `compose --content-id`.
+- Optional objects remain inert unless selected. Selected objects participate
+  in manifest preflight and manifest travel.
+- `game-overlay` placement is relative to the logical materialized game root;
+  `sidecar` placement is isolated below the materialization's `extras/` tree.
+  Traversal, links, ambiguous archive members and file collisions are rejected.
+- Composition writes `.ogv-optional-content.json` recording selected ids and
+  placement results, and exposes the selected ids in the composition result.
+- Preserved UMU-native recipes are not altered by this contract; optional
+  content declarations/selections are rejected for native recipes, preserving
+  explicit backend-specific exceptions such as DMC5.
+
 ## 0.19.6 — 2026-08-21
 
 - Added `ogv-game-source-v1` as the canonical backend-neutral game-source

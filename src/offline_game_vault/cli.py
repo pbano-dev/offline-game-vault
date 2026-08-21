@@ -1816,6 +1816,43 @@ def _command_migrate_bottles_contract(
     return 0
 
 
+def _command_list_optional_content(args: argparse.Namespace) -> int:
+    from .optional_content import OptionalContentError, list_optional_content
+
+    try:
+        items = list_optional_content(
+            capsule_path=args.capsule,
+            collection_root=args.collection_root,
+        )
+    except OptionalContentError as exc:
+        raise CompositionError(str(exc)) from exc
+
+    payload = {
+        "schema": 0,
+        "capsule": str(args.capsule),
+        "items": items,
+    }
+    if args.json:
+        print(
+            json.dumps(
+                payload,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    else:
+        if not items:
+            print("No optional content declared.")
+        for item in items:
+            available = "yes" if item["available"] else "NO"
+            print(
+                f"{item['id']}: {item['classification']} "
+                f"[{item['placement']['mode']}] available={available}"
+            )
+    return 0
+
+
 def _command_compose(args: argparse.Namespace) -> int:
     # Cross-backend validation: --state-root and --save-id only apply
     # to UMU; they name concepts (preserved state_archives, save
@@ -1873,6 +1910,7 @@ def _command_compose(args: argparse.Namespace) -> int:
         "capsule_path": args.capsule,
         "runner_id": args.runner,
         "source_profile_id": args.source_profile,
+        "content_ids": tuple(getattr(args, "content_id", ())),
         "play": args.play,
     }
     forwarded = tuple(args.arguments)
@@ -3033,6 +3071,34 @@ def build_parser() -> argparse.ArgumentParser:
         handler=_command_migrate_bottles_contract
     )
 
+    optional_content_parser = commands.add_parser(
+        "list-optional-content",
+        help=(
+            "List backend-neutral selectable immutable content declared "
+            "by a capsule."
+        ),
+    )
+    optional_content_parser.add_argument(
+        "--collection-root",
+        type=Path,
+        required=True,
+        help="Offline Game Vault collection root.",
+    )
+    optional_content_parser.add_argument(
+        "--capsule",
+        type=Path,
+        required=True,
+        help="Source capsule.json.",
+    )
+    optional_content_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+    optional_content_parser.set_defaults(
+        handler=_command_list_optional_content
+    )
+
     composition_parser = commands.add_parser(
         "compose",
         help=(
@@ -3074,6 +3140,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--destination",
         type=Path,
         help="New external materialization destination.",
+    )
+    composition_parser.add_argument(
+        "--content-id",
+        action="append",
+        default=[],
+        help=(
+            "ID of optional immutable content to include. Repeat for multiple "
+            "items. Omit all --content-id arguments for the base game only."
+        ),
     )
     composition_parser.add_argument(
         "--state-root",

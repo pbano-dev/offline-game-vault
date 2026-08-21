@@ -925,9 +925,16 @@ def compose_wine(
     state_backup: Path | None = None,
     fresh_start: bool = False,
     no_state: bool = False,
+    content_ids: Sequence[str] = (),
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
+    from .optional_content import (
+        OptionalContentError,
+        materialize_optional_content,
+        prepare_operational_optional_content,
+    )
+
     _validate_fresh_start_intent(
         fresh_start=fresh_start,
         no_state=no_state,
@@ -967,6 +974,16 @@ def compose_wine(
             runner=runner,
             source_profile_id=source_id,
         )
+        try:
+            operational_capsule, selected_content = (
+                prepare_operational_optional_content(
+                    source_capsule_path=capsule_path,
+                    operational_capsule_path=operational_capsule,
+                    selected_ids=content_ids,
+                )
+            )
+        except OptionalContentError as exc:
+            raise CompositionError(str(exc)) from exc
         digests = _capsule_object_digests(operational_capsule)
         try:
             validate_manifests_present_for(
@@ -987,6 +1004,17 @@ def compose_wine(
             no_state=effective_no_state,
         )
         try:
+            optional_receipt = materialize_optional_content(
+                source_capsule_path=capsule_path,
+                source_profile_id=source_id,
+                operational_capsule_path=operational_capsule,
+                operational_profile_id=profile_id,
+                vault_root=vault_root,
+                destination=destination,
+                records=selected_content,
+            )
+            if optional_receipt is not None:
+                write_receipt_sidecar(optional_receipt)
             copied_manifests = copy_manifests_to_materialization(
                 vault_root=vault_root,
                 destination=destination,
@@ -1001,11 +1029,11 @@ def compose_wine(
                 },
             )
             write_receipt_sidecar(receipt_path)
-        except (ManifestTravelError, OSError) as exc:
+        except (OptionalContentError, ManifestTravelError, OSError) as exc:
             _rollback_destination(destination)
             raise CompositionError(
-                "Materialization was published but manifest travel "
-                f"failed: {exc}. The destination was removed to "
+                "Materialization was published but optional-content placement "
+                f"or manifest travel failed: {exc}. The destination was removed to "
                 "preserve the invariant that a successful compose "
                 "produces a self-verifiable tree."
             ) from exc
@@ -1036,6 +1064,9 @@ def compose_wine(
             "materialization": asdict(result),
             "state_provisioned": not effective_no_state,
             "fresh_start": fresh_start,
+            "selected_content_ids": [
+                item.content_id for item in selected_content
+            ],
             "play": play_result,
         },
     )
@@ -1210,8 +1241,15 @@ def compose_bottles(
     state_backup: Path | None = None,
     fresh_start: bool = False,
     no_state: bool = False,
+    content_ids: Sequence[str] = (),
     play: bool = False,
 ) -> CompositionResult:
+    from .optional_content import (
+        OptionalContentError,
+        materialize_optional_content,
+        prepare_operational_optional_content,
+    )
+
     _validate_fresh_start_intent(
         fresh_start=fresh_start,
         no_state=no_state,
@@ -1297,6 +1335,16 @@ def compose_bottles(
             runner=runner,
             destination=root / "capsule",
         )
+        try:
+            operational_capsule, selected_content = (
+                prepare_operational_optional_content(
+                    source_capsule_path=capsule_path,
+                    operational_capsule_path=operational_capsule,
+                    selected_ids=content_ids,
+                )
+            )
+        except OptionalContentError as exc:
+            raise CompositionError(str(exc)) from exc
         digests = _capsule_object_digests(operational_capsule)
         try:
             validate_manifests_present_for(
@@ -1341,6 +1389,17 @@ def compose_bottles(
                 state_capsule_path=capsule_path,
             )
             try:
+                optional_receipt = materialize_optional_content(
+                    source_capsule_path=capsule_path,
+                    source_profile_id=source_id,
+                    operational_capsule_path=operational_capsule,
+                    operational_profile_id=profile_id,
+                    vault_root=vault_root,
+                    destination=destination,
+                    records=selected_content,
+                )
+                if optional_receipt is not None:
+                    write_receipt_sidecar(optional_receipt)
                 copied_manifests = copy_manifests_to_materialization(
                     vault_root=vault_root,
                     destination=destination,
@@ -1357,7 +1416,7 @@ def compose_bottles(
                     },
                 )
                 write_receipt_sidecar(receipt_path)
-            except (ManifestTravelError, OSError) as exc:
+            except (OptionalContentError, ManifestTravelError, OSError) as exc:
                 # Un-register the external bottle before dropping the
                 # destination; leaving a dangling symlink in the managed
                 # Bottles directory would be worse than a lost
@@ -1368,11 +1427,11 @@ def compose_bottles(
                     pass
                 _rollback_destination(destination)
                 raise CompositionError(
-                    "Materialization was published but manifest "
-                    f"travel failed: {exc}. The destination and its "
-                    "external registration were removed to preserve "
-                    "the invariant that a successful compose produces "
-                    "a self-verifiable tree."
+                    "Materialization was published but optional-content "
+                    f"placement or manifest travel failed: {exc}. "
+                    "The destination and its external registration were "
+                    "removed to preserve the invariant that a successful "
+                    "compose produces a self-verifiable tree."
                 ) from exc
             if play:
                 launch_plan, returncode = (
@@ -1411,6 +1470,9 @@ def compose_bottles(
             "runner_installed": runner_created,
             "state_provisioned": not effective_no_state,
             "fresh_start": fresh_start,
+            "selected_content_ids": [
+                item.content_id for item in selected_content
+            ],
             "play": play_result,
         },
     )
@@ -2756,9 +2818,16 @@ def compose_umu(
     save_id: str | None = None,
     fresh_start: bool = False,
     no_state: bool = False,
+    content_ids: Sequence[str] = (),
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
+    from .optional_content import (
+        OptionalContentError,
+        materialize_optional_content,
+        prepare_operational_optional_content,
+    )
+
     _validate_fresh_start_intent(
         fresh_start=fresh_start,
         no_state=no_state,
@@ -2796,6 +2865,14 @@ def compose_umu(
             "selection and lookup."
         ) from exc
     source_kind = _source_kind(capsule_path, source_profile_doc)
+    native_optional = source_capsule_doc.get("optional_content", [])
+    if source_kind == "umu-native" and (content_ids or native_optional):
+        raise CompositionError(
+            "Selectable optional content is currently defined only for "
+            "backend-neutral source contracts; preserved UMU-native recipes "
+            "remain unchanged."
+        )
+    selected_content = ()
     effective_no_state = _effective_materializer_no_state(
         source_kind=source_kind or "",
         fresh_start=fresh_start,
@@ -2863,6 +2940,16 @@ def compose_umu(
                 runtime=runtime,
                 output=Path(temporary) / "capsule",
             )
+            try:
+                operational_capsule, selected_content = (
+                    prepare_operational_optional_content(
+                        source_capsule_path=capsule_path,
+                        operational_capsule_path=operational_capsule,
+                        selected_ids=content_ids,
+                    )
+                )
+            except OptionalContentError as exc:
+                raise CompositionError(str(exc)) from exc
             require_state_backup = not effective_no_state
             # `skipped_state_archives` is meaningful only for umu-native
             # (synthesized UMU has no preserved state_archives). Keep it
@@ -2890,6 +2977,17 @@ def compose_umu(
             no_state=effective_no_state,
         )
         try:
+            optional_receipt = materialize_optional_content(
+                source_capsule_path=capsule_path,
+                source_profile_id=source_id,
+                operational_capsule_path=operational_capsule,
+                operational_profile_id=profile_id,
+                vault_root=vault_root,
+                destination=destination,
+                records=selected_content,
+            )
+            if optional_receipt is not None:
+                write_receipt_sidecar(optional_receipt)
             copied_manifests = copy_manifests_to_materialization(
                 vault_root=vault_root,
                 destination=destination,
@@ -2904,11 +3002,11 @@ def compose_umu(
                 },
             )
             write_receipt_sidecar(receipt_path)
-        except (ManifestTravelError, OSError) as exc:
+        except (OptionalContentError, ManifestTravelError, OSError) as exc:
             _rollback_destination(destination)
             raise CompositionError(
-                "Materialization was published but manifest travel "
-                f"failed: {exc}. The destination was removed to "
+                "Materialization was published but optional-content placement "
+                f"or manifest travel failed: {exc}. The destination was removed to "
                 "preserve the invariant that a successful compose "
                 "produces a self-verifiable tree."
             ) from exc
@@ -2952,6 +3050,9 @@ def compose_umu(
             "source_kind": source_kind,
             "state_provisioned": not effective_no_state,
             "fresh_start": fresh_start,
+            "selected_content_ids": [
+                item.content_id for item in selected_content
+            ],
             "skipped_state_archives": skipped_state_archives,
             "play": play_result,
         },
