@@ -353,6 +353,7 @@ def _select_runner(
 
 
 _NEUTRAL_CONTRACTS = {
+    "ogv-game-source-v1",
     "ogv-bottles-neutral-v1",
     "ogv-direct-wine-neutral-v1",
     "ogv-umu-neutral-v1",
@@ -364,11 +365,13 @@ _SOURCE_PRIORITIES: dict[str, dict[str, int]] = {
         "ogv-direct-wine-neutral-v1": 1,
         "ogv-bottles-neutral-v1": 2,
         "ogv-umu-neutral-v1": 3,
+        "ogv-game-source-v1": 4,
     },
     "bottles": {
         "ogv-bottles-neutral-v1": 0,
         "ogv-direct-wine-neutral-v1": 1,
         "ogv-umu-neutral-v1": 2,
+        "ogv-game-source-v1": 3,
     },
     "umu": {
         "umu-native": 0,
@@ -376,6 +379,7 @@ _SOURCE_PRIORITIES: dict[str, dict[str, int]] = {
         "ogv-direct-wine-neutral-v1": 2,
         "ogv-bottles-neutral-v1": 3,
         "playable-wine": 4,
+        "ogv-game-source-v1": 5,
     },
 }
 

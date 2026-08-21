@@ -251,6 +251,7 @@ def _read_host_contract(
 
 
 _NEUTRAL_CONTRACTS = {
+    "ogv-game-source-v1",
     "ogv-bottles-neutral-v1",
     "ogv-direct-wine-neutral-v1",
     "ogv-umu-neutral-v1",

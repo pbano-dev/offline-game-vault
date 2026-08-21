@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.19.6 — 2026-08-21
+
+- Added `ogv-game-source-v1` as the canonical backend-neutral game-source
+  contract for newly imported games.
+- A canonical game source is eligible for Direct-Wine, Bottles and generic UMU
+  composition; backend, preserved runner and required runtime remain choices
+  resolved at composition time.
+- Existing `ogv-bottles-neutral-v1`, `ogv-direct-wine-neutral-v1`,
+  `ogv-umu-neutral-v1` and `playable-wine` source priorities remain unchanged
+  for historical capsules; the canonical source is additive.
+- Preserved UMU-native profiles keep their higher-priority native semantics;
+  this change does not neutralize backend-specific structural exceptions.
+
 ## 0.19.5 — 2026-08-20
 
 - Added backend-neutral `compose --fresh-start` intent: begin without
