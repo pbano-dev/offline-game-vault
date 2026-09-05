@@ -40,6 +40,7 @@ from .neutral_profiles import (
     materialize_neutral_bottle_source,
     validate_neutral_bottles_source,
 )
+from .composition_state import prepare_fresh_start_configuration
 from .playable import materialize_playable_profile, run_playable_profile
 from .preserved_runners import RunnerCatalogError, RunnerRecord, scan_runners
 from .runner_deployment import RunnerDeploymentError, ensure_bottles_runner
@@ -929,6 +930,8 @@ def compose_wine(
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
+    # Normal materialization intentionally keeps state_capsule_path=capsule_path;
+    # only the fresh-start projection uses a temporary filtered capsule.
     from .optional_content import (
         OptionalContentError,
         materialize_optional_content,
@@ -991,16 +994,19 @@ def compose_wine(
             )
         except ManifestTravelError as exc:
             raise CompositionError(str(exc)) from exc
-        # For generic Direct-Wine materialization, fresh-start and
-        # no-state both omit restorable state. The semantic distinction is
-        # retained at the composition boundary for backends such as UMU-native.
+        selected_state_capsule = capsule_path
+        if fresh_start:
+            selected_state_capsule, state_backup = prepare_fresh_start_configuration(
+                collection_root=collection_root, capsule_path=capsule_path,
+                temporary=Path(temporary) / "fresh-state")
+            effective_no_state = state_backup is None
         result = materialize_playable_profile(
             capsule_path=operational_capsule,
             profile_id=profile_id,
             vault_root=vault_root,
             destination=destination,
             state_backup=None if effective_no_state else state_backup,
-            state_capsule_path=capsule_path,
+            state_capsule_path=selected_state_capsule,
             no_state=effective_no_state,
         )
         try:
@@ -1244,6 +1250,8 @@ def compose_bottles(
     content_ids: Sequence[str] = (),
     play: bool = False,
 ) -> CompositionResult:
+    # Normal materialization intentionally keeps state_capsule_path=capsule_path;
+    # only the fresh-start projection uses a temporary filtered capsule.
     from .optional_content import (
         OptionalContentError,
         materialize_optional_content,
@@ -1353,6 +1361,12 @@ def compose_bottles(
         except ManifestTravelError as exc:
             raise CompositionError(str(exc)) from exc
         raw = root / "neutral-source"
+        selected_state_capsule = capsule_path
+        if fresh_start:
+            selected_state_capsule, state_backup = prepare_fresh_start_configuration(
+                collection_root=collection_root, capsule_path=capsule_path,
+                temporary=root / "fresh-state")
+            effective_no_state = state_backup is None
         materialize_profile(
             capsule_path=operational_capsule,
             profile_id=profile_id,
@@ -1386,7 +1400,7 @@ def compose_bottles(
                     None if effective_no_state else state_backup
                 ),
                 require_state_backup=not effective_no_state,
-                state_capsule_path=capsule_path,
+                state_capsule_path=selected_state_capsule,
             )
             try:
                 optional_receipt = materialize_optional_content(
@@ -2224,6 +2238,17 @@ def _generic_umu_prefix_setup(
         relative = operation_path.relative_to(prefix_path).as_posix()
         path_expression = f'"$PREFIX"/{shlex.quote(relative)}'
 
+        if operation_type == "move":
+            _safe_relative(raw_operation.get("target"), "prefix move source")
+            lines.extend((
+                f"OGV_PREFIX_OP_PATH={path_expression}",
+                '[[ -d "$OGV_PREFIX_OP_PATH" && ! -L "$OGV_PREFIX_OP_PATH" ]] || {',
+                "    printf 'UMU composition: relocated game directory is absent\\n' >&2",
+                "    exit 1",
+                "}",
+            ))
+            continue
+
         if operation_type == "mkdir":
             lines.extend(
                 (
@@ -2681,6 +2706,11 @@ def _umu_overlay(
 
     source["umu"] = {
         "schema": 0,
+        "prefix_moves": [
+            deepcopy(operation)
+            for operation in playable.get("prefix_operations", [])
+            if operation.get("type") == "move"
+        ],
         "layout": [
             *source_layout,
             {
@@ -2822,6 +2852,8 @@ def compose_umu(
     play: bool = False,
     arguments: Sequence[str] = (),
 ) -> CompositionResult:
+    # Normal materialization intentionally keeps state_capsule_path=capsule_path;
+    # only the fresh-start projection uses a temporary filtered capsule.
     from .optional_content import (
         OptionalContentError,
         materialize_optional_content,
@@ -2962,18 +2994,25 @@ def compose_umu(
             )
         except ManifestTravelError as exc:
             raise CompositionError(str(exc)) from exc
+        selected_state_capsule = capsule_path
+        if fresh_start and source_kind != "umu-native":
+            selected_state_capsule, state_backup = prepare_fresh_start_configuration(
+                collection_root=collection_root, capsule_path=capsule_path,
+                temporary=Path(temporary) / "fresh-state")
+            effective_no_state = state_backup is None
+            require_state_backup = not effective_no_state
         result = materialize_umu_profile(
             capsule_path=operational_capsule,
             profile_id=profile_id,
             vault_root=vault_root,
             destination=destination,
             state_backup=(
-                None if effective_no_state or fresh_start else state_backup
+                None if effective_no_state or (fresh_start and source_kind == "umu-native") else state_backup
             ),
             state_root=state_root,
             save_id=save_id,
             require_state_backup=require_state_backup,
-            state_capsule_path=capsule_path,
+            state_capsule_path=selected_state_capsule,
             no_state=effective_no_state,
         )
         try:

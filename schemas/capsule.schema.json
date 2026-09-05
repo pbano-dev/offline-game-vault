@@ -251,7 +251,7 @@
                     "type": "string"
                   },
                   "type": {
-                    "const": "symlink"
+                    "enum": ["symlink", "move"]
                   }
                 },
                 "required": [
@@ -464,6 +464,18 @@
     "umuPlayable": {
       "additionalProperties": false,
       "properties": {
+        "prefix_moves": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["type", "path", "target"],
+            "properties": {
+              "type": {"const": "move"},
+              "path": {"$ref": "#/$defs/relativePath"},
+              "target": {"$ref": "#/$defs/relativePath"}
+            }
+          }
+        },
         "allowed_absolute_symlinks": {
           "items": {
             "additionalProperties": false,

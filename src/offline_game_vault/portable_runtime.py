@@ -318,7 +318,7 @@ def verify_materialization(
             operation.get("path"),
             f"prefix_operations[{index}].path",
         )
-        if operation_type == "mkdir":
+        if operation_type in {"mkdir", "move"}:
             if path.is_symlink() or not path.is_dir():
                 raise PortableRuntimeError("Required prefix directory is absent.")
         elif operation_type == "symlink":

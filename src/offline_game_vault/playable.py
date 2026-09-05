@@ -315,7 +315,7 @@ def _profile_and_contract(
         if not isinstance(operation, dict):
             raise PlayableError("Prefix operation must be an object.")
         operation_type = operation.get("type")
-        if operation_type not in {"mkdir", "symlink"}:
+        if operation_type not in {"mkdir", "symlink", "move"}:
             raise PlayableError("Unsupported prefix operation type.")
         path = _safe_relative(
             operation.get("path"),
@@ -330,13 +330,15 @@ def _profile_and_contract(
             "type": operation_type,
             "path": path.as_posix(),
         }
-        if operation_type == "symlink":
+        if operation_type in {"symlink", "move"}:
             target = operation.get("target")
             if not isinstance(target, str) or not target:
-                raise PlayableError("Symlink prefix operation needs a target.")
+                raise PlayableError("Prefix operation needs a target.")
             if PurePosixPath(target).is_absolute():
-                raise PlayableError("Prefix symlink target must be relative.")
+                raise PlayableError("Prefix operation target must be relative.")
             normalized["target"] = target
+            if operation_type == "move":
+                _safe_relative(target, "prefix move source")
         prefix_operations.append(normalized)
 
     protected_value = playable.get("protected_files")
@@ -595,6 +597,13 @@ def _apply_prefix_operations(
         path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         if operation["type"] == "mkdir":
             path.mkdir(mode=0o700)
+        elif operation["type"] == "move":
+            source = _path_under(stage, _safe_relative(operation["target"], "prefix move source"))
+            if source.is_symlink() or not source.is_dir():
+                raise PlayableError("Prefix move source must be a regular directory.")
+            if path.is_relative_to(source) or source.is_relative_to(path):
+                raise PlayableError("Prefix move paths overlap.")
+            os.replace(source, path)
         else:
             target = operation["target"]
             os.symlink(target, path)
@@ -806,16 +815,10 @@ def materialize_playable_profile(
             contract=contract,
         )
 
-    state_declarations = _state_declarations(state_capsule)
+    state_declarations = [] if no_state else _state_declarations(state_capsule)
     state_verification = None
     if state_declarations:
-        if no_state:
-            # Cold materialization: do not require or verify a state
-            # backup. The caller (compose_wine) has passed None for
-            # state_backup, and the CLI has already rejected the
-            # combination of --no-state with --state-backup.
-            state_verification = None
-        elif state_backup is None:
+        if state_backup is None:
             raise PlayableError(
                 "This capsule declares persistent state; --state-backup "
                 "is required."
@@ -932,9 +935,9 @@ def materialize_playable_profile(
                 raise PlayableError(
                     "Baseline state receipt has no backup_id."
                 )
-            if restore_result.restored_count != len(state_declarations):
+            if not restore_result.complete:
                 raise PlayableError(
-                    "Not every declared state item was restored."
+                    "The selected state backup was not completely restored."
                 )
 
         protected_declarations = _augment_runtime_protected(

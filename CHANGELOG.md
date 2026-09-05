@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19.9 — 2026-09-05
+
+- Restore game-local identity/configuration on neutral Direct-Wine and UMU
+  compositions by moving the staged game into the prefix before restoration;
+  no extra game copy or relaxed state symlink checks are needed.
+- Add a validated `move` prefix operation and preserve it through UMU synthesis.
+- For generic `--fresh-start`, restore only identity/configuration from the
+  registered accepted baseline, excluding saved games. Keep `--no-state` cold.
+- Accept complete selected backups with absent optional state in Direct-Wine.
+- Exercise game-local state and fresh starts across Wine, UMU and Bottles.
+
 ## 0.19.8 — 2026-09-05
 
 - Generate `tar`/`tar.gz` per-object manifests directly from the archive

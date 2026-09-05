@@ -477,6 +477,15 @@ def build_derived_capsule(
             f"{prefix_destination}/{game_destination}"
         )
         game_source_path = f"{neutral_destination}/payload/game"
+        physical_game_source = game_source_path
+        game_state = any(
+            isinstance(item, dict)
+            and isinstance(item.get("path"), str)
+            and PurePosixPath(item["path"]).is_relative_to(PurePosixPath(game_destination))
+            for item in original.get("persistent_state", [])
+        )
+        if game_state:
+            game_source_path = game_destination_path
         game_link_target = posixpath.relpath(
             game_source_path,
             posixpath.dirname(game_destination_path),
@@ -515,9 +524,9 @@ def build_derived_capsule(
             },
             "prefix_operations": [
                 {
-                    "type": "symlink",
+                    "type": "move" if game_state else "symlink",
                     "path": game_destination_path,
-                    "target": game_link_target,
+                    "target": physical_game_source if game_state else game_link_target,
                 }
             ],
             "protected_files": remapped_protected,

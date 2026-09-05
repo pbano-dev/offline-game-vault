@@ -64,6 +64,65 @@ def _make_tar_gz(
 
 
 class CompositionTests(unittest.TestCase):
+    def test_game_local_identity_restores_with_all_neutral_backends(self):
+        from offline_game_vault.state_manager import preserve_state
+        relative = "drive_c/Games/game/steam_settings/configs.user.ini"
+        self.capsule["persistent_state"] = [{"id": "identity", "path": relative,
+            "kind": "identity", "backup": True, "required": True, "sensitive": True},
+            {"id": "save", "path": "drive_c/saves/data.bin", "kind": "save", "backup": True, "required": False}]
+        for key in ("readme", "game_sheet", "credits", "preserved_by"):
+            self.capsule["documents"][key] = key + ".md"
+            (self.capsule_root / (key + ".md")).write_text(key)
+        self.capsule_path.write_text(json.dumps(self.capsule))
+        state_root = self.root / "state-source"
+        ini = state_root / relative
+        ini.parent.mkdir(parents=True)
+        data = b"[user::general]\naccount_steamid=76561198000000000\nlanguage=spanish\n"
+        ini.write_bytes(data)
+        (state_root / "drive_c/saves").mkdir()
+        (state_root / "drive_c/saves/data.bin").write_bytes(b"saved-game")
+        backup = self.collection / "identity-backup"
+        preserve_state(capsule_path=self.capsule_path, state_root=state_root, backup=backup, confirm_stopped=True)
+        index_path = self.collection / "INDEX.json"
+        index = json.loads(index_path.read_text())
+        index["capsules"] = [{"capsule_id": "game", "accepted_state": "identity-backup"}]
+        index_path.write_text(json.dumps(index))
+        self._add_umu_backend()
+        for backend, compose in (("wine", compose_wine), ("umu", compose_umu), ("bottles", compose_bottles)):
+            with self.subTest(backend=backend):
+                destination = self.root / f"identity-{backend}"
+                kwargs = {}
+                if backend == "bottles":
+                    bottles = self.root / "bottles"
+                    bottles.mkdir()
+                    kwargs = {"bottles_path": bottles, "bottle_name": "Identity"}
+                result = compose(collection_root=self.collection, capsule_path=self.capsule_path,
+                    runner_id="ge-proton", destination=destination, state_backup=backup, **kwargs)
+                self.assertTrue(result.materialized)
+                if backend == "bottles":
+                    restored = destination / "payload/game/steam_settings/configs.user.ini"
+                else:
+                    restored = destination / "source/payload/prefix-template" / relative
+                    self.assertFalse((destination / "source/payload/game").exists())
+                    self.assertFalse(restored.parent.parent.is_symlink())
+                self.assertEqual(restored.read_bytes(), data)
+                if backend == "umu":
+                    script = subprocess.run([str(destination / "launchers/JUGAR_UMU.sh")], capture_output=True, text=True)
+                    self.assertEqual(script.returncode, 0, script.stderr)
+                fresh = self.root / f"fresh-{backend}"
+                if backend == "bottles":
+                    kwargs["bottle_name"] = "Fresh"
+                result = compose(collection_root=self.collection, capsule_path=self.capsule_path,
+                    runner_id="ge-proton", destination=fresh, fresh_start=True, **kwargs)
+                self.assertTrue(result.materialized)
+                if backend == "bottles":
+                    self.assertEqual((fresh / "payload/game/steam_settings/configs.user.ini").read_bytes(), data)
+                    prefix = fresh / "payload/prefix"
+                else:
+                    prefix = fresh / "source/payload/prefix-template"
+                    self.assertEqual((prefix / relative).read_bytes(), data)
+                self.assertFalse((prefix / "drive_c/saves/data.bin").exists())
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)

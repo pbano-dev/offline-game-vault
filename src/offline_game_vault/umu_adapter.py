@@ -1941,6 +1941,26 @@ def materialize_umu_profile(
 
         shutil.rmtree(extraction_root)
 
+        moves = contract.get("prefix_moves", [])
+        if not isinstance(moves, list):
+            raise UmuAdapterError("umu.prefix_moves must be an array.")
+        for operation in moves:
+            if not isinstance(operation, dict) or operation.get("type") != "move":
+                raise UmuAdapterError("Invalid UMU prefix move.")
+            prefix = _safe_relative(contract.get("paths", {}).get("prefix"), "umu.paths.prefix")
+            move_relative = _safe_relative(operation.get("path"), "prefix move path")
+            if move_relative == prefix or not move_relative.is_relative_to(prefix):
+                raise UmuAdapterError("Prefix move must remain below the prefix.")
+            source_path = _path_under(staging, _safe_relative(operation.get("target"), "prefix move source"))
+            destination_path = _path_under(staging, move_relative)
+            if (source_path.is_symlink() or not source_path.is_dir()
+                    or destination_path.exists() or destination_path.is_symlink()
+                    or destination_path.is_relative_to(source_path)
+                    or source_path.is_relative_to(destination_path)):
+                raise UmuAdapterError("Invalid or colliding prefix move.")
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source_path, destination_path)
+
         nested = contract.get("nested_archives", [])
         if not isinstance(nested, list):
             raise UmuAdapterError("umu.nested_archives must be an array.")

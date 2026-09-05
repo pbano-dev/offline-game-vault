@@ -10,6 +10,7 @@ from typing import Any
 
 from .state_manager import (
     StateError,
+    preserve_state,
     restore_state,
     verify_state_backup,
 )
@@ -17,6 +18,51 @@ from .state_manager import (
 
 STATE_BACKUP_RECEIPT = "state-backup.json"
 STATE_RESTORE_RECEIPT = "state-restore-receipt.json"
+
+
+def prepare_fresh_start_configuration(*, collection_root: Path, capsule_path: Path, temporary: Path) -> tuple[Path, Path | None]:
+    """Project the registered baseline into identity/configuration only.
+
+    Fresh start never restores saves, even if the registered baseline contains
+    them. Work happens in a private control directory before game extraction.
+    """
+    capsule = _load_capsule(capsule_path)
+    declarations = [item for item in capsule.get("persistent_state", [])
+                    if item.get("backup", True) and item.get("kind") in {"identity", "configuration"}]
+    if not declarations:
+        return capsule_path, None
+    index = _load_capsule(collection_root / "INDEX.json")
+    record = next((entry for entry in index.get("capsules", [])
+                   if entry.get("capsule_id") == capsule.get("capsule_id")), None)
+    raw = record.get("accepted_state") if record else None
+    if not raw:
+        return capsule_path, None
+    from pathlib import PurePosixPath
+    relative = PurePosixPath(raw)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise CompositionStateError("Invalid accepted state path.")
+    backup = collection_root.joinpath(*relative.parts)
+    if backup.is_symlink() or not backup.resolve().is_relative_to(collection_root.resolve()):
+        raise CompositionStateError("Accepted state escapes its collection.")
+    temporary.mkdir(mode=0o700)
+    live = temporary / "state"
+    live.mkdir(mode=0o700)
+    try:
+        restored = restore_state(capsule_path=capsule_path, state_root=live,
+            backup=backup, snapshot=temporary / "snapshot", confirm_stopped=True)
+        if not restored.complete:
+            raise CompositionStateError("The baseline configuration could not be restored.")
+        filtered_root = temporary / "capsule"
+        shutil.copytree(capsule_path.parent, filtered_root, symlinks=True)
+        capsule["persistent_state"] = declarations
+        filtered_path = filtered_root / capsule_path.name
+        filtered_path.write_text(json.dumps(capsule), encoding="utf-8")
+        selected = temporary / "configuration-backup"
+        preserve_state(capsule_path=filtered_path, state_root=live,
+                       backup=selected, confirm_stopped=True)
+        return filtered_path, selected
+    except StateError as exc:
+        raise CompositionStateError(str(exc)) from exc
 
 
 class CompositionStateError(RuntimeError):
