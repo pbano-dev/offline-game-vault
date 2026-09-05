@@ -68,7 +68,7 @@ Base commit: `10c918641aa9425499c13a13ba4329b2dca53866`.
 
 Implement generic commands for:
 
-- catalog build and verification;
+- transactional clients that invoke stable catalog build and verification;
 - normalized comparison of declared volatile runtime paths;
 - detection of symlinks that escape the materialization;
 - authorized capture of external host dependencies;
@@ -83,10 +83,10 @@ names.
 
 ## Priority 3: catalog schema and lifecycle
 
-- Add a JSON Schema for `.ogvref`.
-- Make catalog generation idempotent.
-- Add `catalog verify`.
-- Define whether previous catalogs are retained or replaced.
+- Evolve `.ogvref` only through explicit schema generations.
+- Preserve catalog byte-idempotence and atomic replacement.
+- Keep `catalog-verify` in publication acceptance paths.
+- Previous catalogs are atomically replaced; retain that explicit lifecycle.
 - Keep the CAS path based only on digest.
 - Audit unreferenced objects through capsules and receipts before deletion.
 

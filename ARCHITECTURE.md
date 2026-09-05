@@ -335,9 +335,9 @@ The CAS is optimized for identity, not file-browser legibility.
 primary function. References are small metadata files, not copies, hardlinks,
 or alternative authorities.
 
-The catalog generator has been validated against a real collection. Core CLI
-integration, schema validation for `.ogvref`, and idempotent `catalog verify`
-commands remain pending.
+The catalog generator is exposed by Core as atomic `catalog-build` and exact
+`catalog-verify` commands. `.ogvref` and `CATALOG.json` have generation-0 JSON
+schemas, and rebuilding the same canonical collection is byte-idempotent.
 
 ## 16. Transactional publication
 
@@ -466,7 +466,6 @@ Implemented in the `0.11.4` work tree:
 
 Pending stable core command families:
 
-- catalog build and verification;
 - external-dependency capture workflow;
 - end-to-end transactional profile publication.
 

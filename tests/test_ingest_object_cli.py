@@ -267,6 +267,74 @@ class IngestObjectCliTests(unittest.TestCase):
         self.assertIsNotNone(payload["manifest_warning"])
         self.assertIn("warning", stderr.getvalue().lower())
 
+    def test_required_manifest_turns_manifest_warning_into_failure(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(
+                [
+                    "ingest-object",
+                    "--source",
+                    str(self.source),
+                    "--vault-root",
+                    str(self.vault),
+                    "--digest",
+                    self.digest,
+                    "--format",
+                    "tar.gz",
+                    "--require-manifest",
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(code, 2)
+        self.assertIn("Required per-object manifest", stderr.getvalue())
+
+    def test_required_manifest_rejects_missing_format_before_ingest(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(
+                [
+                    "ingest-object",
+                    "--source",
+                    str(self.source),
+                    "--vault-root",
+                    str(self.vault),
+                    "--digest",
+                    self.digest,
+                    "--require-manifest",
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(code, 2)
+        self.assertIn("needs a declared archive format", stderr.getvalue())
+        self.assertFalse((self.vault / "objects").exists())
+
+    def test_required_manifest_succeeds_for_valid_archive(self) -> None:
+        self._prepare_capsule_ingest()
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(
+                [
+                    "ingest-object",
+                    "--source",
+                    str(self.archive),
+                    "--vault-root",
+                    str(self.vault),
+                    "--digest",
+                    self.archive_digest,
+                    "--format",
+                    "tar.gz",
+                    "--require-manifest",
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["manifest_generated"])
+        self.assertTrue(Path(payload["manifest_path"]).is_file())
+
     def test_direct_mode_without_format_skips_manifest(self) -> None:
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):

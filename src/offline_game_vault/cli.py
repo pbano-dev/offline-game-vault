@@ -116,6 +116,7 @@ from .manifest_catalog import (
     manifest_is_current,
     scan_vault,
 )
+from .catalog_view import CatalogViewError, build_catalog, verify_catalog
 
 
 def _print_text_plan(plan: MaterializationPlan) -> None:
@@ -372,6 +373,18 @@ def _validate_ingest_format_intent(args: argparse.Namespace) -> None:
     Non-existent capsules or missing object entries are left to the ingest
     engine itself to surface with its usual errors.
     """
+    if getattr(args, "require_manifest", False):
+        if getattr(args, "no_manifest", False):
+            raise ObjectManifestError(
+                "--require-manifest cannot be combined with --no-manifest."
+            )
+        try:
+            _resolve_ingest_format(args)
+        except _FormatUnavailable as exc:
+            raise ObjectManifestError(
+                "--require-manifest needs a declared archive format."
+            ) from exc
+
     explicit_format = getattr(args, "format", None)
     if not explicit_format:
         return
@@ -523,6 +536,18 @@ def _command_ingest_object(args: argparse.Namespace) -> int:
     manifest_fields = _maybe_generate_manifest_for_ingested_object(
         args, result
     )
+    if getattr(args, "require_manifest", False) and not (
+        manifest_fields["manifest_generated"]
+        or manifest_fields["manifest_already_present"]
+    ):
+        reason = (
+            manifest_fields["manifest_warning"]
+            or manifest_fields["manifest_skipped_reason"]
+            or "unknown manifest failure"
+        )
+        raise ObjectManifestError(
+            "Required per-object manifest was not published: " + reason
+        )
     if manifest_fields["manifest_warning"]:
         print(
             "ogv: warning: manifest not generated: "
@@ -777,6 +802,33 @@ def _command_generate_missing_manifests(args: argparse.Namespace) -> int:
             print("(dry-run: nothing was written)")
 
     return 1 if result.has_failures else 0
+
+
+def _command_catalog_build(args: argparse.Namespace) -> int:
+    result = build_catalog(
+        args.collection_root,
+        output=args.output,
+        dry_run=args.dry_run,
+    )
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+    else:
+        print(f"Status:       {result['status']}")
+        print(f"Capsules:     {result['capsule_count']}")
+        print(f"Objects:      {result['object_count']}")
+        print(f"Game refs:    {result['game_reference_count']}")
+    return 0
+
+
+def _command_catalog_verify(args: argparse.Namespace) -> int:
+    result = verify_catalog(args.collection_root)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+    else:
+        print("Catalog:      verified")
+        print(f"Capsules:     {result['capsule_count']}")
+        print(f"Objects:      {result['object_count']}")
+    return 0
 
 
 def _print_profile_ingest(result: ProfileIngestResult) -> None:
@@ -2276,6 +2328,15 @@ def build_parser() -> argparse.ArgumentParser:
             "generate-object-manifest or generate-missing-manifests."
         ),
     )
+    ingest.add_argument(
+        "--require-manifest",
+        action="store_true",
+        help=(
+            "Fail the command unless a valid per-object manifest already "
+            "exists or is generated successfully. The ingested object remains "
+            "content-addressed if manifest generation fails."
+        ),
+    )
     ingest.set_defaults(handler=_command_ingest_object)
 
 
@@ -2394,6 +2455,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON.",
     )
     missing.set_defaults(handler=_command_generate_missing_manifests)
+
+    catalog_build = commands.add_parser(
+        "catalog-build",
+        help="Regenerate the human-readable 00_CATALOG view atomically.",
+    )
+    catalog_build.add_argument(
+        "--collection-root", type=Path, required=True,
+        help="Collection root containing capsules and the immutable Vault.",
+    )
+    catalog_build.add_argument(
+        "--output", type=Path,
+        help="Write here instead of <collection>/00_CATALOG.",
+    )
+    catalog_build.add_argument(
+        "--dry-run", action="store_true",
+        help="Validate and compute the catalog without writing it.",
+    )
+    catalog_build.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON."
+    )
+    catalog_build.set_defaults(handler=_command_catalog_build)
+
+    catalog_verify = commands.add_parser(
+        "catalog-verify",
+        help="Verify that 00_CATALOG matches capsules and inventory exactly.",
+    )
+    catalog_verify.add_argument(
+        "--collection-root", type=Path, required=True,
+        help="Collection root containing 00_CATALOG.",
+    )
+    catalog_verify.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON."
+    )
+    catalog_verify.set_defaults(handler=_command_catalog_verify)
 
 
     ingest_profile_parser = commands.add_parser(
@@ -3254,6 +3349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         RunnerCatalogError,
         ObjectManifestError,
         ManifestCatalogError,
+        CatalogViewError,
     ) as exc:
         print(f"ogv: error: {exc}", file=sys.stderr)
         return 2

@@ -14,6 +14,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 from offline_game_vault.object_manifest import (
     ManifestEntry,
@@ -372,6 +373,32 @@ class GenerationTest(unittest.TestCase):
         )
         paths = {entry.path.as_posix() for entry in manifest.entries}
         self.assertEqual(paths, {"engine/inner/binary", "evidence/log.txt"})
+
+    def test_tar_manifest_streams_without_temporary_extraction(self) -> None:
+        archive = self.root / "streamed.tar.gz"
+        with tarfile.open(archive, "w:gz") as handle:
+            info = tarfile.TarInfo("payload/game.bin")
+            payload = b"large-game-placeholder\n"
+            info.size = len(payload)
+            handle.addfile(info, io.BytesIO(payload))
+
+        digest = "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest()
+        with mock.patch(
+            "offline_game_vault.object_manifest._extract_archive",
+            side_effect=AssertionError("tar generation must not extract"),
+        ):
+            manifest = generate_object_manifest(
+                archive=archive,
+                archive_format="tar.gz",
+                source_root="payload",
+                object_digest=digest,
+                object_size=archive.stat().st_size,
+                generator="offline-game-vault/test",
+            )
+
+        self.assertEqual(manifest.file_count, 1)
+        self.assertEqual(manifest.entries[0].path.as_posix(), "game.bin")
+        self.assertEqual(manifest.entries[0].size, len(payload))
 
 
 class WriteAndReadTest(unittest.TestCase):

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:offline-game-vault:schema:object-reference:0",
+  "title": "Offline Game Vault human-readable object reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "contract", "digest", "object_id", "aliases", "roles",
+    "kind", "scope", "bytes", "path", "consumers"
+  ],
+  "properties": {
+    "schema": {"const": 0},
+    "contract": {"const": "ogv-object-reference-v1"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "object_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "aliases": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"}, "uniqueItems": true},
+    "roles": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "kind": {"type": "string", "minLength": 1},
+    "scope": {"enum": ["game", "shared", "unreferenced"]},
+    "bytes": {"type": "integer", "minimum": 0},
+    "path": {"type": "string", "pattern": "^01_IMMUTABLE_VAULT/objects/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"},
+    "consumers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capsule_id", "object_id", "title"],
+        "properties": {
+          "capsule_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+          "object_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+          "title": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

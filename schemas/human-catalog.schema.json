@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:offline-game-vault:schema:human-catalog:0",
+  "title": "Offline Game Vault human-readable catalog summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "contract", "capsule_count", "object_count",
+    "referenced_object_count", "unreferenced_object_count",
+    "game_reference_count"
+  ],
+  "properties": {
+    "schema": {"const": 0},
+    "contract": {"const": "ogv-human-catalog-v1"},
+    "capsule_count": {"type": "integer", "minimum": 0},
+    "object_count": {"type": "integer", "minimum": 0},
+    "referenced_object_count": {"type": "integer", "minimum": 0},
+    "unreferenced_object_count": {"type": "integer", "minimum": 0},
+    "game_reference_count": {"type": "integer", "minimum": 0}
+  }
+}

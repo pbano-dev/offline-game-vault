@@ -334,21 +334,30 @@ def generate_object_manifest(
             f"Invalid source_root: {source_root!r}"
         )
 
-    entries: list[ManifestEntry] = []
-    with tempfile.TemporaryDirectory(prefix=".ogv-manifest-") as workspace:
-        work = Path(workspace)
-        _extract_archive(
-            archive=archive,
-            destination=work,
-            expected_root=source_root,
-            archive_format=archive_format,
-        )
-        root = work / source_root if source_root else work
-        if root.is_symlink() or not root.is_dir():
-            raise ObjectManifestError(
-                f"Archive does not contain the expected root {source_root!r}."
+    # Tar objects can be hashed directly from their decompression stream.  The
+    # former extract-then-hash implementation temporarily duplicated the full
+    # uncompressed object under /tmp; a large game could therefore exhaust the
+    # system disk after it had already been copied safely into the Vault.
+    fmt = archive_format.lower().strip()
+    if fmt in {"tar", "tar.gz", "tgz"}:
+        entries = _hash_tar_stream(archive, source_root=source_root)
+    else:
+        entries = []
+        with tempfile.TemporaryDirectory(prefix=".ogv-manifest-") as workspace:
+            work = Path(workspace)
+            _extract_archive(
+                archive=archive,
+                destination=work,
+                expected_root=source_root,
+                archive_format=archive_format,
             )
-        entries.extend(_hash_tree(root))
+            root = work / source_root if source_root else work
+            if root.is_symlink() or not root.is_dir():
+                raise ObjectManifestError(
+                    "Archive does not contain the expected root "
+                    f"{source_root!r}."
+                )
+            entries.extend(_hash_tree(root))
 
     stamp = (now or datetime.now(timezone.utc)).replace(microsecond=0)
     generated_at = stamp.isoformat().replace("+00:00", "Z")
@@ -590,6 +599,87 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _hash_tar_stream(
+    archive: Path,
+    *,
+    source_root: str,
+) -> list[ManifestEntry]:
+    """Hash regular tar members without materializing an extraction tree."""
+
+    entries: list[ManifestEntry] = []
+    seen: set[str] = set()
+    root_seen = not source_root
+    try:
+        with tarfile.open(archive, mode="r:*") as handle:
+            for member in handle:
+                member_path = PurePosixPath(member.name)
+                _validate_relative(member_path)
+                if member.ischr() or member.isblk() or member.isfifo():
+                    raise ObjectManifestError(
+                        "Archive contains a special file."
+                    )
+                if source_root:
+                    if member_path == PurePosixPath(source_root):
+                        root_seen = True
+                        continue
+                    try:
+                        relative = member_path.relative_to(source_root)
+                    except ValueError:
+                        # Match the historical extract-then-hash behavior:
+                        # explicit source roots select that subtree.
+                        continue
+                    root_seen = True
+                else:
+                    relative = member_path
+
+                if member.isdir() or member.issym() or member.islnk():
+                    continue
+                if not member.isreg():
+                    raise ObjectManifestError(
+                        f"Unsupported tar member type: {member.name!r}."
+                    )
+                _validate_relative(relative)
+                relative_text = relative.as_posix()
+                if relative_text in seen:
+                    raise ObjectManifestError(
+                        f"Duplicate archive entry: {relative_text!r}."
+                    )
+                stream = handle.extractfile(member)
+                if stream is None:
+                    raise ObjectManifestError(
+                        f"Could not read archive member: {member.name!r}."
+                    )
+                digest = hashlib.sha256()
+                total = 0
+                with stream:
+                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                        total += len(chunk)
+                if total != member.size:
+                    raise ObjectManifestError(
+                        f"Archive member size changed while reading: "
+                        f"{member.name!r}."
+                    )
+                seen.add(relative_text)
+                entries.append(
+                    ManifestEntry(
+                        path=relative,
+                        digest="sha256:" + digest.hexdigest(),
+                        size=total,
+                    )
+                )
+    except (OSError, tarfile.TarError) as exc:
+        raise ObjectManifestError(
+            f"Could not stream tar archive: {exc}"
+        ) from exc
+
+    if not root_seen:
+        raise ObjectManifestError(
+            f"Archive does not contain the expected root {source_root!r}."
+        )
+    return entries
 
 
 # -------------------------------------------------------- extraction

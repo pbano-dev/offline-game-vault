@@ -12,6 +12,8 @@ outside Git.
 
 ```text
 object verification and content-addressed ingestion
+required per-object manifests and streaming tar manifest generation
+deterministic human-readable catalog build and verification
 profile verification and deterministic inventory
 safe staged materialization and guarded removal
 capsule-driven direct-Wine materialization
@@ -31,10 +33,9 @@ a private network namespace with updates disabled.
 ## Architecture status
 
 Generation `0` uses a content-addressed immutable object store and declarative
-capsules. A human-readable catalog and transactional publication workflow have
-been validated against a private collection, but are not yet exposed as stable
-core command families. They are documented as accepted architectural
-directions, not as silently implemented features.
+capsules. The human-readable catalog is exposed through deterministic, atomic
+`catalog-build` and exact `catalog-verify` commands. Transactional profile
+publication remains a client workflow over stable Core commands.
 
 Start with:
 
@@ -46,6 +47,13 @@ Start with:
 - `docs/adr/0016-state-free-component-composition-rationale.md`
 - `docs/DSR_UMU_REFERENCE.md`
 - `docs/NEXT_STEPS.md`
+
+Regenerate or verify the file-browser catalog with:
+
+```bash
+ogv catalog-build --collection-root /path/to/OfflineGameVault
+ogv catalog-verify --collection-root /path/to/OfflineGameVault
+```
 
 ## Sanitized repository fixtures
 

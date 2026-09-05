@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.8 — 2026-09-05
+
+- Generate `tar`/`tar.gz` per-object manifests directly from the archive
+  stream instead of extracting the complete payload under `/tmp` first.
+- Add `ingest-object --require-manifest` for transactional clients that must
+  not report success when an ingested object cannot be materialized.
+- Add deterministic, atomic `catalog-build` and exact `catalog-verify`
+  commands with generation-0 schemas for `CATALOG.json` and `.ogvref` files.
+
 ## 0.19.7 — 2026-08-21
 
 - Added a backend-neutral `optional_content` capsule contract for immutable,
