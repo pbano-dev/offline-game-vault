@@ -161,11 +161,14 @@ def write_generated_files_manifest(
     manifest_file = destination / GENERATED_FILES_MANIFEST
     excluded = {p.resolve() for p in (excluded_paths or set())}
     excluded.add(manifest_file.resolve())
+    for name in ("files.json", "files.json.sha256"):
+        excluded.add((destination / "metadata/windows" / name).resolve())
     manifests_subtree = (destination / MANIFESTS_SUBTREE).resolve()
 
     catalog = _load_object_content_catalog(object_manifest_paths)
 
     entries: list[dict[str, object]] = []
+    windows_records: list[dict[str, object]] = []
     for absolute in sorted(_walk_regular_files(destination)):
         relative = absolute.relative_to(destination)
         if absolute in excluded:
@@ -178,6 +181,7 @@ def write_generated_files_manifest(
             pass
         size = absolute.stat().st_size
         digest_hex = _sha256_file(absolute)
+        windows_records.append({"path": relative.as_posix(), "sha256": digest_hex, "bytes": size})
         key = (size, digest_hex)
         if catalog.get(key, 0) > 0:
             catalog[key] -= 1
@@ -190,6 +194,8 @@ def write_generated_files_manifest(
             }
         )
 
+    from .windows_launch import seal_windows_files
+    entries.extend(seal_windows_files(destination, windows_records))
     document = {
         "schema": 0,
         "created_at": _now(),

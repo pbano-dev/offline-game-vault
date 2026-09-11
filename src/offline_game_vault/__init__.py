@@ -1,3 +1,3 @@
 """Offline Game Vault orchestration package."""
 
-__version__ = "0.19.9"
+__version__ = "0.20.0"

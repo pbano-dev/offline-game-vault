@@ -104,3 +104,11 @@ not create a persistent override or duplicate the game and prefix.
 
 UMU refuses incomplete preserved runtimes and launches with network isolation;
 it never downloads a missing Steam Linux Runtime.
+
+
+## Experimental Windows launchers
+
+Core 0.20.0 adds Windows launch files to Linux compositions when their layout
+can be derived safely. Existing capsule archives stay unchanged. Preparation
+is **not** Windows gameplay acceptance: see [Windows portability](docs/WINDOWS_PORTABILITY.md)
+for the runtime contract, state recovery, prerequisites and validation boundary.

@@ -64,6 +64,27 @@ def _make_tar_gz(
 
 
 class CompositionTests(unittest.TestCase):
+    def test_all_neutral_backends_prepare_windows_from_the_same_game(self):
+        self._add_umu_backend()
+        before = self.capsule_path.read_bytes()
+        for name, compose in (("wine", compose_wine), ("umu", compose_umu), ("bottles", compose_bottles)):
+            with self.subTest(backend=name):
+                kwargs = {}
+                if name == "bottles":
+                    bottles = self.root / "native-bottles-registry"
+                    bottles.mkdir()
+                    kwargs = {"bottles_path": bottles, "bottle_name": "Native"}
+                destination = self.root / ("native-" + name)
+                result = compose(collection_root=self.collection, capsule_path=self.capsule_path,
+                    runner_id="ge-proton", destination=destination, no_state=True, **kwargs)
+                self.assertEqual(result.backend_result["windows"]["status"], "prepared-unverified", result.backend_result["windows"])
+                manifest = json.loads((destination / "metadata/windows/launch.json").read_text())
+                self.assertEqual((destination / manifest["entrypoint"]).read_bytes(), self.game_payload)
+                self.assertTrue(manifest["game_root"].endswith("/game"), manifest["game_root"])
+                files = json.loads((destination / "metadata/windows/files.json").read_text())
+                self.assertTrue(any(entry["path"] == manifest["entrypoint"] for entry in files["files"]))
+                self.assertEqual(self.capsule_path.read_bytes(), before)
+
     def test_game_local_identity_restores_with_all_neutral_backends(self):
         from offline_game_vault.state_manager import preserve_state
         relative = "drive_c/Games/game/steam_settings/configs.user.ini"
@@ -150,7 +171,9 @@ class CompositionTests(unittest.TestCase):
         self.capsule_root.mkdir(parents=True)
         (self.collection / "04_RECEIPTS").mkdir()
 
-        self.game_payload = b"synthetic-game"
+        self.game_payload = (b"MZ" + b"\0" * 58 + (64).to_bytes(4, "little")
+            + b"PE\0\0" + (0x8664).to_bytes(2, "little") + b"\0" * 14
+            + (240).to_bytes(2, "little") + b"\0\0" + (0x20B).to_bytes(2, "little") + b"\0" * 238)
         self.game_archive = self.root / "game.tar.gz"
         _make_tar_gz(
             self.game_archive,

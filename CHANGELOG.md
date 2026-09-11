@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.20.0 — 2026-09-11
+
+- Derive experimental native Windows launchers from existing composed game files,
+  without modifying capsules, immutable objects, or the importer contract.
+- Report preparation separately from Windows gameplay acceptance. Unsupported
+  PE files, paths and state mappings block Windows preparation only.
+- Carry declared saves and identity through Windows Known Folders with verified
+  staging, a recovery journal and preservation of pre-existing host state.
+- Keep the most recent progress in the shared prefix for subsequent Linux runs;
+  block generated Linux Play/Remove while Windows recovery is pending.
+- Reuse composition's file hashing pass for the native integrity manifest.
+- Add native Windows CI probes for PowerShell launch, arguments, state, child
+  processes, corruption and recovery. Passing CI is not game acceptance.
+- Windows networking and registry use the host. Automatic dependency installation,
+  Wine registry import and native Windows composition are outside this release.
+
 ## 0.19.9 — 2026-09-05
 
 - Restore game-local identity/configuration on neutral Direct-Wine and UMU

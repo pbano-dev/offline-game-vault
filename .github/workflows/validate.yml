@@ -72,3 +72,26 @@ jobs:
 
       - name: Reject files generated during CI
         run: python -B tools/check_repository_hygiene.py --filesystem
+
+  windows-native:
+    name: Native Windows runtime (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: src
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Test native PowerShell 5.1 launch, integrity, state and recovery
+        run: python -B -m unittest discover -s tests_windows -v

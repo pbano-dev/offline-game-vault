@@ -40,6 +40,7 @@ from .neutral_profiles import (
     materialize_neutral_bottle_source,
     validate_neutral_bottles_source,
 )
+from .windows_launch import WindowsLaunchError, prepare_windows_launch
 from .composition_state import prepare_fresh_start_configuration
 from .playable import materialize_playable_profile, run_playable_profile
 from .preserved_runners import RunnerCatalogError, RunnerRecord, scan_runners
@@ -1026,6 +1027,11 @@ def compose_wine(
                 destination=destination,
                 digests=digests,
             )
+            windows_result = prepare_windows_launch(
+                destination=destination, capsule_path=operational_capsule,
+                profile_id=profile_id, state_capsule_path=capsule_path,
+                source_profile_id=source_id,
+            )
             receipt_path = destination / _PLAYABLE_RECEIPT_NAME
             write_generated_files_manifest(
                 destination=destination,
@@ -1035,7 +1041,7 @@ def compose_wine(
                 },
             )
             write_receipt_sidecar(receipt_path)
-        except (OptionalContentError, ManifestTravelError, OSError) as exc:
+        except (OptionalContentError, ManifestTravelError, WindowsLaunchError, OSError) as exc:
             _rollback_destination(destination)
             raise CompositionError(
                 "Materialization was published but optional-content placement "
@@ -1067,6 +1073,7 @@ def compose_wine(
         played=played,
         play_complete=play_complete,
         backend_result={
+            "windows": windows_result,
             "materialization": asdict(result),
             "state_provisioned": not effective_no_state,
             "fresh_start": fresh_start,
@@ -1419,6 +1426,11 @@ def compose_bottles(
                     destination=destination,
                     digests=digests,
                 )
+                windows_result = prepare_windows_launch(
+                    destination=destination, capsule_path=operational_capsule,
+                    profile_id=profile_id, state_capsule_path=capsule_path,
+                    source_profile_id=source_id,
+                )
                 receipt_path = destination / _BOTTLES_RECEIPT_NAME
                 write_generated_files_manifest(
                     destination=destination,
@@ -1430,7 +1442,7 @@ def compose_bottles(
                     },
                 )
                 write_receipt_sidecar(receipt_path)
-            except (OptionalContentError, ManifestTravelError, OSError) as exc:
+            except (OptionalContentError, ManifestTravelError, WindowsLaunchError, OSError) as exc:
                 # Un-register the external bottle before dropping the
                 # destination; leaving a dangling symlink in the managed
                 # Bottles directory would be worse than a lost
@@ -1480,6 +1492,7 @@ def compose_bottles(
         played=played,
         play_complete=play_complete,
         backend_result={
+            "windows": windows_result,
             "deployment": asdict(deployment),
             "runner_installed": runner_created,
             "state_provisioned": not effective_no_state,
@@ -3032,6 +3045,11 @@ def compose_umu(
                 destination=destination,
                 digests=digests,
             )
+            windows_result = prepare_windows_launch(
+                destination=destination, capsule_path=operational_capsule,
+                profile_id=profile_id, state_capsule_path=capsule_path,
+                source_profile_id=source_id,
+            )
             receipt_path = destination / _UMU_RECEIPT_NAME
             write_generated_files_manifest(
                 destination=destination,
@@ -3041,7 +3059,7 @@ def compose_umu(
                 },
             )
             write_receipt_sidecar(receipt_path)
-        except (OptionalContentError, ManifestTravelError, OSError) as exc:
+        except (OptionalContentError, ManifestTravelError, WindowsLaunchError, OSError) as exc:
             _rollback_destination(destination)
             raise CompositionError(
                 "Materialization was published but optional-content placement "
@@ -3073,6 +3091,7 @@ def compose_umu(
         played=played,
         play_complete=play_complete,
         backend_result={
+            "windows": windows_result,
             "materialization": asdict(result),
             "component_set_id": (
                 runtime.component_set_id if runtime else None
