@@ -7,7 +7,19 @@ $Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
 $Utf8 = New-Object Text.UTF8Encoding($false)
 
 function Hash-File([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Keep integrity checks independent of PowerShell module discovery. A 5.1
+    # process can inherit a PSModulePath from a newer PowerShell host.
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $algorithm.Dispose()
+    }
 }
 function Check-Seal([string]$Path) {
     No-Links $Path
@@ -483,4 +495,3 @@ try {
     if ($null -ne $Mutex) { $Mutex.Dispose() }
 }
 exit $ExitCode
-

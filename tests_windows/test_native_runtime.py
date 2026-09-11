@@ -112,15 +112,32 @@ class NativeRuntimeTests(unittest.TestCase):
     def command(self, action):
         return [self.powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(self.destination / RUNTIME), "-Action", action]
 
-    def run_action(self, action, expected=0):
+    def run_action(self, action, expected=0, expected_error=None):
         result = subprocess.run(self.command(action), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40)
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        if expected_error is not None:
+            self.assertIn(expected_error, result.stdout + result.stderr)
         return result
 
     def host_seed(self):
         self.host.mkdir()
         (self.host / "save.txt").write_text("host-original", encoding="utf-8")
         (self.host / "extra.dat").write_bytes(b"existing-host-only-data")
+
+    def test_verify_without_get_filehash_still_detects_corruption(self):
+        self.prepare()
+        wrapper = self.root / "without-filehash.ps1"
+        wrapper.write_text(
+            'param([string]$Runtime)\n'
+            'function Get-FileHash { throw "Get-FileHash must not be required" }\n'
+            '& $Runtime -Action Verify\n', encoding="utf-8")
+        command = self.command("Verify")[:7] + [str(wrapper), "-Runtime", str(self.destination / RUNTIME)]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=40)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.exe.write_bytes(b"corrupted")
+        result = subprocess.run(command, capture_output=True, text=True, timeout=40)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Game executable integrity failed", result.stdout + result.stderr)
 
     def assert_host_restored(self):
         self.assertEqual((self.host / "save.txt").read_text(), "host-original")
@@ -200,7 +217,7 @@ class NativeRuntimeTests(unittest.TestCase):
         self.host_seed()
         self.prepare()
         self.exe.write_bytes(b"corrupted")
-        self.run_action("Play", expected=1)
+        self.run_action("Play", expected=1, expected_error="Game executable integrity failed")
         self.assert_host_restored()
         self.assertEqual((self.source / "save.txt").read_text(), "preserved")
 
@@ -209,7 +226,7 @@ class NativeRuntimeTests(unittest.TestCase):
         self.prepare()
         with (self.destination / MANIFEST).open("ab") as stream:
             stream.write(b" ")
-        self.run_action("Play", expected=1)
+        self.run_action("Play", expected=1, expected_error="Integrity check failed: launch.json")
         self.assert_host_restored()
 
     def test_recovery_after_launcher_kill_retains_progress_and_restores_host(self):
@@ -238,7 +255,7 @@ class NativeRuntimeTests(unittest.TestCase):
         journal = json.loads(original_journal)
         journal["machine"] = "different-host"
         journal_path.write_text(json.dumps(journal))
-        self.run_action("Recover", expected=1)
+        self.run_action("Recover", expected=1, expected_error="Session belongs to another user, host, contract")
         self.assertEqual((self.host / "save.txt").read_text(), "preserved+progress")
         journal_path.write_bytes(original_journal)
         # Recovery must work even if the executable has become unavailable.
@@ -257,7 +274,7 @@ class NativeRuntimeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.addCleanup(lambda: self.host.rmdir() if self.host.is_junction() else None)
         self.prepare()
-        self.run_action("Play", expected=1)
+        self.run_action("Play", expected=1, expected_error="Refusing a reparse point:")
         self.assertEqual((outside / "save.txt").read_text(), "untouched")
 
 

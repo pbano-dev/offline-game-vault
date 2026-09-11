@@ -94,4 +94,5 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test native PowerShell 5.1 launch, integrity, state and recovery
+        shell: powershell
         run: python -B -m unittest discover -s tests_windows -v
