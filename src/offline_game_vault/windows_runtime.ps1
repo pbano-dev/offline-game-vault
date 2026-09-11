@@ -111,7 +111,9 @@ function Write-Json([string]$Path, $Document) {
     $bytes = $Utf8.GetBytes(($Document | ConvertTo-Json -Depth 30))
     $stream = New-Object IO.FileStream($temp, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
     try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp, $Path, $null) }
+    # PowerShell converts $null to an empty string for a .NET string parameter.
+    # File.Replace requires an actual null to omit the backup filename.
+    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp, $Path, [System.Management.Automation.Language.NullString]::Value) }
     else { [IO.File]::Move($temp, $Path) }
 }
 function Fingerprint([string]$Path) {

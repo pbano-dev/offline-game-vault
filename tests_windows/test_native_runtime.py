@@ -130,7 +130,8 @@ class NativeRuntimeTests(unittest.TestCase):
         wrapper.write_text(
             'param([string]$Runtime)\n'
             'function Get-FileHash { throw "Get-FileHash must not be required" }\n'
-            '& $Runtime -Action Verify\n', encoding="utf-8")
+            '& $Runtime -Action Verify\n'
+            'exit $LASTEXITCODE\n', encoding="utf-8")
         command = self.command("Verify")[:7] + [str(wrapper), "-Runtime", str(self.destination / RUNTIME)]
         result = subprocess.run(command, capture_output=True, text=True, timeout=40)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
