@@ -155,7 +155,8 @@ class NativeRuntimeTests(unittest.TestCase):
         self.assert_host_restored()
         self.assertEqual((self.source / "save.txt").read_text(), "preserved+progress")
         self.assertEqual((self.source / "args.txt").read_text(encoding="utf-8-sig").splitlines(), self.args)
-        self.assertEqual(Path((self.source / "cwd.txt").read_text()), self.game)
+        # Windows may report the long name while TEMP uses its 8.3 alias.
+        self.assertTrue(Path((self.source / "cwd.txt").read_text()).samefile(self.game))
         self.assertEqual((self.source / "identity.txt").read_text(), "account-and-spanish")
         self.run_action("Play")
         self.assert_host_restored()
@@ -231,6 +232,16 @@ class NativeRuntimeTests(unittest.TestCase):
         self.assert_host_restored()
 
     def test_recovery_after_launcher_kill_retains_progress_and_restores_host(self):
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
         self.host_seed()
         self.profile["launch"]["environment"]["OGV_TEST_MODE"] = "hold"
         self.prepare()
@@ -243,14 +254,22 @@ class NativeRuntimeTests(unittest.TestCase):
                     self.fail((out + err).decode(errors="replace"))
                 time.sleep(.1)
             self.assertTrue((self.game / "ready.txt").exists(), "Probe never launched")
+            # Open the live child's handle before killing the launcher. Waiting
+            # on this handle checks that exact process, even if its PID is reused.
+            pid = int((self.game / "ready.txt").read_text())
+            child_handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+            if not child_handle:
+                raise ctypes.WinError(ctypes.get_last_error())
+            self.addCleanup(kernel32.CloseHandle, child_handle)
+            self.assertEqual(kernel32.WaitForSingleObject(child_handle, 0), 258,
+                             "Probe must still be running before launcher termination")
         finally:
             process.kill()
             process.communicate(timeout=10)
         # Job destruction is asynchronous; verify the child is actually gone.
-        pid = int((self.game / "ready.txt").read_text())
-        check = subprocess.run([self.powershell, "-NoProfile", "-Command", f"$p = Get-Process -Id {pid} -ErrorAction SilentlyContinue; if ($p) {{ $p.WaitForExit(5000) | Out-Null; if (!$p.HasExited) {{ exit 1 }} }}"], timeout=10)
-        self.assertEqual(check.returncode, 0, "Job did not terminate its child")
-        self.run_action("Play", expected=1)
+        self.assertEqual(kernel32.WaitForSingleObject(child_handle, 5000), 0,
+                         "Job did not terminate its child within 5 seconds")
+        self.run_action("Play", expected=1, expected_error="An interrupted session needs RECUPERAR_WINDOWS.bat")
         journal_path = self.destination / ".ogv-windows/active.json"
         original_journal = journal_path.read_bytes()
         journal = json.loads(original_journal)
